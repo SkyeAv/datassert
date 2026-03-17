@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -193,6 +195,11 @@ type SourcesTable struct {
 	NLPLevel      uint8  `paruquet:"NLP_LEVEL"`
 }
 
+type CategoriesTable struct {
+	CategoryID uint32 `paruquet:"CATEGORY_ID"`
+	Category   string `paruquet:"CATEGORY"`
+}
+
 type SynonymsTable struct {
 	CurieID  uint32 `paruquet:"CURIE_ID"`
 	SourceID uint8  `paruquet:"SOURCE_ID"`
@@ -250,6 +257,14 @@ func parseSynonymFile(fileName string, cl *ClassLookup, cm *CategoryMap, wg *syn
 
 		category := sr.Categories[0]
 		categoryID := cm.GetOrAdd(category)
+
+		taxon := 0
+		if len(sr.Taxon) > 0 {
+			s := fmt.Sprintf("%v", sr.Taxon[0])
+			s = strings.TrimPrefix(s, "NCBITaxon:")
+			taxon, _ = strconv.Atoi(s)
+		}
+
 	}
 }
 
