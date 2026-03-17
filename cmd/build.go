@@ -159,10 +159,30 @@ func buildClassLookup(fileNames []string) *ClassLookup {
 	return cl
 }
 
-var categories = sync.Map{}
+func parseSynonymFile(fileName string, cl *ClassLookup, cg *sync.Map, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-func buildSynonymParquets(fileNames []string, cl *ClassLookup) []string {
-	return []string{}
+	f, err := os.Open(fileName)
+	if err != nil {
+		throwError(6, err)
+	}
+	defer f.Close()
+
+	zr, err := zstd.NewReader(f)
+	if err != nil {
+		throwError(7, err)
+	}
+	defer zr.Close()
+}
+
+func buildSynonymParquets(fileNames []string, cl *ClassLookup) {
+	wg := sync.WaitGroup{}
+	cg := sync.Map{}
+
+	for _, fileName := range fileNames {
+		wg.Add(1)
+		go parseSynonymFile(fileName, cl, &cg, &wg)
+	}
 }
 
 func build(cmd *cobra.Command, args []string) {
@@ -172,6 +192,7 @@ func build(cmd *cobra.Command, args []string) {
 	cl := buildClassLookup(classFileNames)
 
 	synonymFileNames := globFileNames(babelDir, "Synonym.ndjson.zst")
+	buildSynonymParquets(synonymFileNames, cl)
 }
 
 var buildCmd = &cobra.Command{
