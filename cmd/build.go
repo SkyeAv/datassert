@@ -19,13 +19,13 @@ func throwError(code uint8, err error) {
 	log.Fatal("%d | ERROR | %v", code, err)
 }
 
-func globFileNames(dir string) []string {
+func globFileNames(dir string, suffix string) []string {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		throwError(1, err)
 	}
 
-	pattern := filepath.Join(abs, "*Class.ndjson.zst")
+	pattern := filepath.Join(abs, suffix)
 	fileNames, err := filepath.Glob(pattern)
 	if err != nil {
 		throwError(2, err)
@@ -170,13 +170,12 @@ func buildSynonymParquets(fileNames []string, cl *ClassLookup) []string {
 }
 
 func build(cmd *cobra.Command, args []string) {
-	classDir := args[0]
-	synonymDir := args[1]
+	babelDir := args[0]
 
-	classFileNames := globFileNames(classDir)
+	classFileNames := globFileNames(babelDir, "Class.ndjson.zst")
 	cl := buildClassLookup(classFileNames)
 
-	synonymFileNames := globFileNames(synonymDir)
+	synonymFileNames := globFileNames(babelDir, "Synonym.ndjson.zst")
 }
 
 var buildCmd = &cobra.Command{
