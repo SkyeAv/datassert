@@ -163,6 +163,12 @@ func buildClassLookup(fileNames []string) *ClassLookup {
 	return cl
 }
 
+var categories = sync.Map{}
+
+func buildSynonymParquets(fileNames []string, cl *ClassLookup) []string {
+	return []string{}
+}
+
 func build(cmd *cobra.Command, args []string) {
 	classDir := args[0]
 	synonymDir := args[1]
