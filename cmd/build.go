@@ -205,7 +205,15 @@ type CuriesTable struct {
 
 var l1Regex = regexp.MustCompile(`\W+`)
 
-func parseSynonymFile(fileName string, cl *ClassLookup, cm *CategoryMap, wg *sync.WaitGroup) {
+type CurieCounter struct {
+	counter atomic.Uint32
+}
+
+func (cc *CurieCounter) Next() uint32 {
+	return cc.counter.Add(1) - 1
+}
+
+func parseSynonymFile(fileName string, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	f, err := os.Open(fileName)
@@ -237,6 +245,7 @@ func parseSynonymFile(fileName string, cl *ClassLookup, cm *CategoryMap, wg *syn
 		if isBadToken(curie) {
 			continue
 		}
+		curieID := cc.Next()
 
 		synonyms := sr.Synonyms
 		synonyms = append(synonyms, curie)
@@ -266,14 +275,14 @@ func parseSynonymFile(fileName string, cl *ClassLookup, cm *CategoryMap, wg *syn
 		}
 
 		taxonID := uint32(taxon)
-		cut = append(cut, CuriesTable{Curie: curie, PreferredName: preferred, CategoryID: categoryID, Taxon: taxonID})
+		cut = append(cut, CuriesTable{CurieID: curieID, Curie: curie, PreferredName: preferred, CategoryID: categoryID, Taxon: taxonID})
 
 		newSynonyms := []SynonymsTable{}
 		for _, synonym := range l0Synonyms {
-			newSynonyms = append(newSynonyms, SynonymsTable{Synonym: synonym, SourceID: 0})
+			newSynonyms = append(newSynonyms, SynonymsTable{CurieID: curieID, Synonym: synonym, SourceID: 0})
 		}
 		for _, synonym := range l1Synonyms {
-			newSynonyms = append(newSynonyms, SynonymsTable{Synonym: synonym, SourceID: 1})
+			newSynonyms = append(newSynonyms, SynonymsTable{CurieID: curieID, Synonym: synonym, SourceID: 1})
 		}
 		syt = append(syt, newSynonyms...)
 	}
@@ -294,10 +303,11 @@ type CategoriesTable struct {
 func buildSynonymParquets(fileNames []string, cl *ClassLookup) {
 	wg := sync.WaitGroup{}
 	cm := CategoryMap{}
+	cc := CurieCounter{}
 
 	for _, fileName := range fileNames {
 		wg.Add(1)
-		go parseSynonymFile(fileName, cl, &cm, &wg)
+		go parseSynonymFile(fileName, cl, &cm, &cc, &wg)
 	}
 }
 
