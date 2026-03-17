@@ -213,7 +213,7 @@ func (cc *CurieCounter) Next() uint32 {
 	return cc.counter.Add(1) - 1
 }
 
-func parseSynonymFile(fileName string, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, wg *sync.WaitGroup) {
+func parseSynonymFile(fileName string, batchSize uint32, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	f, err := os.Open(fileName)
@@ -300,25 +300,33 @@ type CategoriesTable struct {
 	Category   string `paruquet:"CATEGORY"`
 }
 
-func buildSynonymParquets(fileNames []string, cl *ClassLookup) {
+func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize uint32) {
 	wg := sync.WaitGroup{}
 	cm := CategoryMap{}
 	cc := CurieCounter{}
 
 	for _, fileName := range fileNames {
 		wg.Add(1)
-		go parseSynonymFile(fileName, cl, &cm, &cc, &wg)
+		go parseSynonymFile(fileName, batchSize, cl, &cm, &cc, &wg)
 	}
 }
 
 func build(cmd *cobra.Command, args []string) {
 	babelDir := args[0]
+	batchLen := args[1]
+
+	batchInt, err := strconv.Atoi(batchLen)
+	if err != nil {
+		throwError(9, err)
+	}
+
+	batchSize := uint32(batchInt)
 
 	classFileNames := globFileNames(babelDir, "Class.ndjson.zst")
 	cl := buildClassLookup(classFileNames)
 
 	synonymFileNames := globFileNames(babelDir, "Synonym.ndjson.zst")
-	buildSynonymParquets(synonymFileNames, cl)
+	buildSynonymParquets(synonymFileNames, cl, batchSize)
 }
 
 var buildCmd = &cobra.Command{
