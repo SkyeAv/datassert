@@ -39,10 +39,6 @@ type ClassLookup struct {
 	data map[string][]string
 }
 
-func NewClassLookup() *ClassLookup {
-	return &ClassLookup{data: make(map[string][]string)}
-}
-
 func (cl *ClassLookup) Set(key string, value []string) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
@@ -151,7 +147,7 @@ func parseClassFile(fileName string, cl *ClassLookup, wg *sync.WaitGroup) {
 }
 
 func buildClassLookup(fileNames []string) *ClassLookup {
-	cl := NewClassLookup()
+	cl := &ClassLookup{data: make(map[string][]string)}
 	wg := sync.WaitGroup{}
 
 	for _, fileName := range fileNames {
