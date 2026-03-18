@@ -16,6 +16,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/klauspost/compress/zstd"
+	"github.com/parquet-go/parquet-go"
 	"github.com/spf13/cobra"
 )
 
@@ -211,6 +212,23 @@ type CurieCounter struct {
 
 func (cc *CurieCounter) Next() uint32 {
 	return cc.counter.Add(1) - 1
+}
+
+type ParquetTable interface {
+	CuriesTable | SynonymsTable
+}
+
+func writeToDisk[T ParquetTable](filePath string, table []T) {
+	f, err := os.Create(filePath)
+	if err != nil {
+		throwError(10, err)
+	}
+	defer f.Close()
+
+	err = parquet.WriteFile(filePath, table)
+	if err != nil {
+		throwError(11, err)
+	}
 }
 
 func parseSynonymFile(fileName string, batchSize uint32, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, wg *sync.WaitGroup) {
