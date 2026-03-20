@@ -57,12 +57,12 @@ func (cl *ClassLookup) Get(key string) ([]string, bool) {
 	return val, ok
 }
 
-var badPrefixes = [2]string{
+var badPrefixes [2]string = [2]string{
 	"INCHIKEY",
 	"inchikey",
 }
 
-var badTokens = [3]string{
+var badTokens [3]string = [3]string{
 	"uncharacterized protein",
 	"uncharacterized gene",
 	"hypothetical protein",
@@ -371,7 +371,7 @@ func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *Categ
 				SynonymsTable{
 					CurieID:  curieID,
 					Synonym:  synonym,
-					SourceID: 0,
+					SourceID: uint8(0),
 				},
 			)
 		}
@@ -381,7 +381,7 @@ func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *Categ
 				SynonymsTable{
 					CurieID:  curieID,
 					Synonym:  synonym,
-					SourceID: 1,
+					SourceID: uint8(1),
 				},
 			)
 		}
@@ -389,6 +389,21 @@ func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *Categ
 		tempSynonyms = append(tempSynonyms, newSynonyms...)
 		synonymNum = writeIfGeLen(fileName, "Synonyms", synonymNum, tempCuries, batchSize)
 	}
+}
+
+var sources []SourcesTable = []SourcesTable{
+	SourcesTable{
+		SourceID:      uint8(0),
+		SourceName:    "BABEL",
+		SourceVersion: "SEPT-2025",
+		NLPLevel:      uint8(0),
+	},
+	SourcesTable{
+		SourceID:      uint8(1),
+		SourceName:    "BABEL",
+		SourceVersion: "SEPT-2025",
+		NLPLevel:      uint8(1),
+	},
 }
 
 func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int) {
@@ -400,6 +415,12 @@ func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int) {
 		wg.Add(1)
 		go parseSynonymFile(fileName, batchSize, cl, &cm, &cc, &wg)
 	}
+
+	categoryParquet := makeParquetName("Biolink", "Categories", 1)
+	writeParquet(categoryParquet, cm.ToTable())
+
+	sourceParquet := makeParquetName("BABEL", "Sources", 1)
+	writeParquet(sourceParquet, sources)
 }
 
 func build(cmd *cobra.Command, args []string) {
