@@ -8,7 +8,7 @@ Datassert is a high-performance CLI for building a DuckDB-backed assertion store
 
 ```bash
 # Install CLI from GitHub
-go install github.com/SkyeAv/Datassert@latest
+go install github.com/SkyeAv/datassert@latest
 
 # Verify install
 datassert --help

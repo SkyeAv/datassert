@@ -264,8 +264,8 @@ func makeParquetName(fileName string, thing string, num int) string {
 	return fmt.Sprintf("%v%v%v-%d.parquet", parquetBaseDir, stem, thing, num)
 }
 
-func writeIfGeLen[T ParquetTable](fileName string, thing string, num int, table []T, batchSize int) (int, []T) {
-	if len(table) >= batchSize {
+func writeIfGtLen[T ParquetTable](fileName string, thing string, num int, table []T, batchSize int) (int, []T) {
+	if len(table) > batchSize {
 		parquetName := makeParquetName(fileName, thing, num)
 		writeParquet(parquetName, table)
 		return num + 1, table[:0]
@@ -367,7 +367,7 @@ func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *Categ
 			},
 		)
 
-		curieNum, tempCuries = writeIfGeLen(fileName, "Curies", curieNum, tempCuries, batchSize)
+		curieNum, tempCuries = writeIfGtLen(fileName, "Curies", curieNum, tempCuries, batchSize)
 
 		newSynonyms := []SynonymsTable{}
 		for _, synonym := range l0Synonyms {
@@ -392,11 +392,11 @@ func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *Categ
 		}
 
 		tempSynonyms = append(tempSynonyms, newSynonyms...)
-		synonymNum, tempSynonyms = writeIfGeLen(fileName, "Synonyms", synonymNum, tempSynonyms, batchSize)
+		synonymNum, tempSynonyms = writeIfGtLen(fileName, "Synonyms", synonymNum, tempSynonyms, batchSize)
 	}
 
-	_, _ = writeIfGeLen(fileName, "Curies", curieNum, tempCuries, 0)
-	_, _ = writeIfGeLen(fileName, "Synonyms", synonymNum, tempSynonyms, 0)
+	_, _ = writeIfGtLen(fileName, "Curies", curieNum, tempCuries, 0)
+	_, _ = writeIfGtLen(fileName, "Synonyms", synonymNum, tempSynonyms, 0)
 }
 
 var sources []SourcesTable = []SourcesTable{
@@ -425,7 +425,7 @@ func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int) {
 	}
 	wg.Wait()
 
-	categoryParquet := makeParquetName("BiolinkSynonyms.njson.zst", "Categories", 1)
+	categoryParquet := makeParquetName("BiolinkSynonyms.ndjson.zst", "Categories", 1)
 	writeParquet(categoryParquet, cm.ToTable())
 
 	sourceParquet := makeParquetName("BabelSynonyms.ndjson.zst", "Sources", 1)
@@ -487,10 +487,10 @@ func buildDuckDB(dbPath string) {
 	iterExecDB(db, tableSchemas)
 	iterExecDB(db, dbConfiguration)
 
-	iterParquetsDB(db, "*Sources*.parquet", "INSERT INTO SOURCES SELECT SOURCE_ID, SOURCE_NAME, SOURCE_VERSION, NLP_LEVEL FROM read_parquet('%v')")
-	iterParquetsDB(db, "*Categories*.parquet", "INSERT INTO CATEGORIES SELECT CATEGORY_ID, CATEGORY_NAME FROM read_parquet('%v')")
-	iterParquetsDB(db, "*Curies*.parquet", "INSERT INTO CURIES SELECT CURIE_ID, CURIE, PREFERRED_NAME, CATEGORY_ID, TAXON_ID FROM read_parquet('%v')")
-	iterParquetsDB(db, "*Synonyms*.parquet", "INSERT INTO SYNONYMS SELECT CURIE_ID, SOURCE_ID, SYNONYM FROM read_parquet('%v')")
+	iterParquetsDB(db, "*Sources-*.parquet", "INSERT INTO SOURCES SELECT SOURCE_ID, SOURCE_NAME, SOURCE_VERSION, NLP_LEVEL FROM read_parquet('%v')")
+	iterParquetsDB(db, "*Categories-*.parquet", "INSERT INTO CATEGORIES SELECT CATEGORY_ID, CATEGORY_NAME FROM read_parquet('%v')")
+	iterParquetsDB(db, "*Curies-*.parquet", "INSERT INTO CURIES SELECT CURIE_ID, CURIE, PREFERRED_NAME, CATEGORY_ID, TAXON_ID FROM read_parquet('%v')")
+	iterParquetsDB(db, "*Synonyms-*.parquet", "INSERT INTO SYNONYMS SELECT CURIE_ID, SOURCE_ID, SYNONYM FROM read_parquet('%v')")
 
 	iterExecDB(db, indexOps)
 }
