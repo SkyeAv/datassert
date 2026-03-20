@@ -192,6 +192,11 @@ type SynonymRecord struct {
 	Taxon         []any    `json:"taxa"`
 }
 
+type CategoriesTable struct {
+	CategoryID uint32 `paruquet:"CATEGORY_ID"`
+	Category   string `paruquet:"CATEGORY"`
+}
+
 type CategoryMap struct {
 	m       sync.Map
 	counter atomic.Uint32
@@ -203,6 +208,21 @@ func (cm *CategoryMap) GetOrAdd(category string) uint32 {
 	}
 	actual, _ := cm.m.LoadOrStore(category, cm.counter.Add(1))
 	return actual.(uint32)
+}
+
+func (cm *CategoryMap) ToTable() []CategoriesTable {
+	tempCategories := []CategoriesTable{}
+	for categoryName, categoryID := range cm.m.Range {
+		tempCategories = append(
+			tempCategories,
+			CategoriesTable{
+				CategoryID: categoryID.(uint32),
+				Category:   categoryName.(string),
+			},
+		)
+	}
+
+	return tempCategories
 }
 
 type SynonymsTable struct {
@@ -219,8 +239,15 @@ type CuriesTable struct {
 	Taxon         uint32 `paruquet:"TAXON,optional"`
 }
 
+type SourcesTable struct {
+	SourceID      uint8  `paruquet:"SOURCE_ID"`
+	SourceName    string `paruquet:"SOURCE_NAME"`
+	SourceVersion string `paruquet:"SOURCE_VERSION"`
+	NLPLevel      uint8  `paruquet:"NLP_LEVEL"`
+}
+
 type ParquetTable interface {
-	CuriesTable | SynonymsTable
+	CuriesTable | SynonymsTable | CategoriesTable | SourcesTable
 }
 
 func writeParquet[T ParquetTable](filePath string, table []T) {
@@ -362,18 +389,6 @@ func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *Categ
 		tempSynonyms = append(tempSynonyms, newSynonyms...)
 		synonymNum = writeIfGeLen(fileName, "Synonyms", synonymNum, tempCuries, batchSize)
 	}
-}
-
-type SourcesTable struct {
-	SourceID      uint8  `paruquet:"SOURCE_ID"`
-	SourceName    string `paruquet:"SOURCE_NAME"`
-	SourceVersion string `paruquet:"SOURCE_VERSION"`
-	NLPLevel      uint8  `paruquet:"NLP_LEVEL"`
-}
-
-type CategoriesTable struct {
-	CategoryID uint32 `paruquet:"CATEGORY_ID"`
-	Category   string `paruquet:"CATEGORY"`
 }
 
 func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int) {
