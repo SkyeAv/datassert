@@ -24,17 +24,19 @@ func throwError(code uint8, err error) {
 	log.Fatalf("%d | ERROR | %v", code, err)
 }
 
+func checkError(code uint8, err error) {
+	if err != nil {
+		throwError(code, err)
+	}
+}
+
 func globFileNames(dir string, suffix string) []string {
 	abs, err := filepath.Abs(dir)
-	if err != nil {
-		throwError(1, err)
-	}
+	checkError(1, err)
 
 	pattern := filepath.Join(abs, suffix)
 	fileNames, err := filepath.Glob(pattern)
-	if err != nil {
-		throwError(2, err)
-	}
+	checkError(2, err)
 
 	return fileNames
 }
@@ -55,12 +57,14 @@ func (cl *ClassLookup) Get(key string) ([]string, bool) {
 	return val, ok
 }
 
-type ClassRecord struct {
-	EquivalentIdentifiers []string `json:"equivalent_identifiers"`
+var badPrefixes = [2]string{
+	"INCHIKEY",
+	"inchikey",
 }
 
-var badTokens = [2]string{
+var badTokens = [3]string{
 	"uncharacterized protein",
+	"uncharacterized gene",
 	"hypothetical protein",
 }
 
@@ -69,8 +73,10 @@ func isBadToken(token string) bool {
 		return true
 	}
 
-	if strings.Contains(token, "INCHIKEY") || strings.Contains(token, "inchikey") {
-		return true
+	for _, badPrefix := range badPrefixes {
+		if strings.Contains(token, badPrefix) {
+			return true
+		}
 	}
 
 	for _, badToken := range badTokens {
@@ -116,19 +122,29 @@ func cleanAliases(aliases []string) []string {
 	return slices.Collect(out)
 }
 
+func yieldReader(fileName string) *os.File {
+	f, err := os.Open(fileName)
+	checkError(3, err)
+	return f
+}
+
+func yieldDecoder(f *os.File) *zstd.Decoder {
+	zr, err := zstd.NewReader(f)
+	checkError(4, err)
+	return zr
+}
+
+type ClassRecord struct {
+	EquivalentIdentifiers []string `json:"equivalent_identifiers"`
+}
+
 func parseClassFile(fileName string, cl *ClassLookup, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	f, err := os.Open(fileName)
-	if err != nil {
-		throwError(3, err)
-	}
+	f := yieldReader(fileName)
 	defer f.Close()
 
-	zr, err := zstd.NewReader(f)
-	if err != nil {
-		throwError(4, err)
-	}
+	zr := yieldDecoder(f)
 	defer zr.Close()
 
 	decoder := sonic.ConfigDefault.NewDecoder(zr)
@@ -137,8 +153,8 @@ func parseClassFile(fileName string, cl *ClassLookup, wg *sync.WaitGroup) {
 		err := decoder.Decode(&cr)
 		if err == io.EOF {
 			break
-		} else if err != nil {
-			throwError(5, err)
+		} else {
+			checkError(5, err)
 		}
 
 		ids := cr.EquivalentIdentifiers
@@ -204,6 +220,19 @@ type CuriesTable struct {
 	Taxon         uint32 `paruquet:"TAXON,optional"`
 }
 
+type ParquetTable interface {
+	CuriesTable | SynonymsTable
+}
+
+func writeParquet[T ParquetTable](filePath string, table []T) {
+	f, err := os.Create(filePath)
+	checkError(6, err)
+	defer f.Close()
+
+	err = parquet.WriteFile(filePath, table)
+	checkError(7, err)
+}
+
 var l1Regex = regexp.MustCompile(`\W+`)
 
 type CurieCounter struct {
@@ -214,36 +243,13 @@ func (cc *CurieCounter) Next() uint32 {
 	return cc.counter.Add(1) - 1
 }
 
-type ParquetTable interface {
-	CuriesTable | SynonymsTable
-}
-
-func writeToDisk[T ParquetTable](filePath string, table []T) {
-	f, err := os.Create(filePath)
-	if err != nil {
-		throwError(10, err)
-	}
-	defer f.Close()
-
-	err = parquet.WriteFile(filePath, table)
-	if err != nil {
-		throwError(11, err)
-	}
-}
-
 func parseSynonymFile(fileName string, batchSize uint32, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	f, err := os.Open(fileName)
-	if err != nil {
-		throwError(6, err)
-	}
+	f := yieldReader(fileName)
 	defer f.Close()
 
-	zr, err := zstd.NewReader(f)
-	if err != nil {
-		throwError(7, err)
-	}
+	zr := yieldDecoder(f)
 	defer zr.Close()
 
 	syt := []SynonymsTable{}
