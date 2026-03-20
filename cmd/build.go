@@ -392,13 +392,13 @@ func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *Categ
 }
 
 var sources []SourcesTable = []SourcesTable{
-	SourcesTable{
+	{
 		SourceID:      uint8(0),
 		SourceName:    "BABEL",
 		SourceVersion: "SEPT-2025",
 		NLPLevel:      uint8(0),
 	},
-	SourcesTable{
+	{
 		SourceID:      uint8(1),
 		SourceName:    "BABEL",
 		SourceVersion: "SEPT-2025",
