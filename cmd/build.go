@@ -193,7 +193,7 @@ type SynonymRecord struct {
 	Curie         string   `json:"curie"`
 	Synonyms      []string `json:"names"`
 	PreferredName string   `json:"preferred_name"`
-	Categories    []string `json:"categories"`
+	Categories    []string `json:"types"`
 	Taxon         []any    `json:"taxa"`
 }
 
@@ -534,7 +534,7 @@ func init() {
 
 	buildCmd.Flags().StringVar(&babelDir, "babel-dir", "", "Directory containing Babel Class and Synonyms .ndjson.zst files")
 	buildCmd.Flags().StringVar(&dbPath, "db-path", "./datassert.duckdb", "Output path for the DuckDB database")
-	buildCmd.Flags().IntVar(&batchSize, "batch-size", 100, "Number of records per Parquet batch")
+	buildCmd.Flags().IntVar(&batchSize, "batch-size", 1000000, "Number of records per Parquet batch")
 
 	buildCmd.MarkFlagRequired("babel-dir")
 }
