@@ -5,6 +5,7 @@ go 1.25.7
 require (
 	github.com/bytedance/sonic v1.15.0
 	github.com/duckdb/duckdb-go/v2 v2.10500.0
+	github.com/gosuri/uiprogress v0.0.1
 	github.com/klauspost/compress v1.18.5
 	github.com/parquet-go/parquet-go v0.29.0
 	github.com/spf13/cobra v1.10.2
@@ -27,8 +28,10 @@ require (
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gosuri/uilive v0.0.4 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/parquet-go/bitpack v1.0.0 // indirect
 	github.com/parquet-go/jsonlite v1.5.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.26 // indirect

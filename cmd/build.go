@@ -19,6 +19,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	_ "github.com/duckdb/duckdb-go/v2"
+	"github.com/gosuri/uiprogress"
 	"github.com/klauspost/compress/zstd"
 	"github.com/parquet-go/parquet-go"
 	"github.com/spf13/cobra"
@@ -149,7 +150,7 @@ type ClassRecord struct {
 	EquivalentIdentifiers []string `json:"equivalent_identifiers"`
 }
 
-func parseClassFile(fileName string, cl *ClassLookup) {
+func parseClassFile(fileName string, cl *ClassLookup, bar *uiprogress.Bar) {
 	f := yieldReader(fileName)
 	defer f.Close()
 
@@ -178,6 +179,8 @@ func parseClassFile(fileName string, cl *ClassLookup) {
 		aliases = cleanAliases(aliases)
 		cl.Set(curie, aliases)
 	}
+
+	bar.Incr()
 }
 
 func buildClassLookup(fileNames []string, nRoutines int) *ClassLookup {
@@ -186,9 +189,14 @@ func buildClassLookup(fileNames []string, nRoutines int) *ClassLookup {
 
 	cl := &ClassLookup{data: map[string]string{}}
 
+	n := len(fileNames)
+	bar := uiprogress.AddBar(n)
+	bar.AppendCompleted()
+	bar.PrependElapsed()
+
 	for _, fileName := range fileNames {
 		g.Go(func() error {
-			parseClassFile(fileName, cl)
+			parseClassFile(fileName, cl, bar)
 			return nil
 		})
 	}
@@ -302,7 +310,7 @@ func (cc *CurieCounter) Next() uint32 {
 	return cc.counter.Add(1) - 1
 }
 
-func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter) {
+func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, bar *uiprogress.Bar) {
 
 	f := yieldReader(fileName)
 	defer f.Close()
@@ -409,6 +417,8 @@ func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *Categ
 
 	_, _ = writeIfGtLen(fileName, "Curies", curieNum, tempCuries, 0)
 	_, _ = writeIfGtLen(fileName, "Synonyms", synonymNum, tempSynonyms, 0)
+
+	bar.Incr()
 }
 
 var sources []SourcesTable = []SourcesTable{
@@ -433,9 +443,14 @@ func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int, nR
 	cm := CategoryMap{}
 	cc := CurieCounter{}
 
+	n := len(fileNames)
+	bar := uiprogress.AddBar(n)
+	bar.AppendCompleted()
+	bar.PrependElapsed()
+
 	for _, fileName := range fileNames {
 		g.Go(func() error {
-			parseSynonymFile(fileName, batchSize, cl, &cm, &cc)
+			parseSynonymFile(fileName, batchSize, cl, &cm, &cc, bar)
 			return nil
 		})
 	}
@@ -517,6 +532,9 @@ var dbPath string
 var batchSize int
 
 func build(cmd *cobra.Command, args []string) {
+	uiprogress.Start()
+	defer uiprogress.Stop()
+
 	cpuCount := runtime.NumCPU()
 
 	classFileNames := globFileNames(babelDir, "*Class.ndjson.zst")
