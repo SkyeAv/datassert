@@ -15,11 +15,14 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"runtime"
+
 	"github.com/bytedance/sonic"
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/klauspost/compress/zstd"
 	"github.com/parquet-go/parquet-go"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 func throwError(code uint8, err error) {
@@ -138,9 +141,7 @@ type ClassRecord struct {
 	EquivalentIdentifiers []string `json:"equivalent_identifiers"`
 }
 
-func parseClassFile(fileName string, cl *ClassLookup, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func parseClassFile(fileName string, cl *ClassLookup) {
 	f := yieldReader(fileName)
 	defer f.Close()
 
@@ -171,16 +172,20 @@ func parseClassFile(fileName string, cl *ClassLookup, wg *sync.WaitGroup) {
 	}
 }
 
-func buildClassLookup(fileNames []string) *ClassLookup {
+func buildClassLookup(fileNames []string, nRoutines int) *ClassLookup {
+	g := &errgroup.Group{}
+	g.SetLimit(nRoutines)
+
 	cl := &ClassLookup{data: map[string][]string{}}
-	wg := sync.WaitGroup{}
 
 	for _, fileName := range fileNames {
-		wg.Add(1)
-		go parseClassFile(fileName, cl, &wg)
+		g.Go(func() error {
+			parseClassFile(fileName, cl)
+			return nil
+		})
 	}
 
-	wg.Wait()
+	g.Wait()
 	return cl
 }
 
@@ -289,8 +294,7 @@ func (cc *CurieCounter) Next() uint32 {
 	return cc.counter.Add(1) - 1
 }
 
-func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, wg *sync.WaitGroup) {
-	defer wg.Done()
+func parseSynonymFile(fileName string, batchSize int, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter) {
 
 	f := yieldReader(fileName)
 	defer f.Close()
@@ -414,16 +418,21 @@ var sources []SourcesTable = []SourcesTable{
 	},
 }
 
-func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int) {
-	wg := sync.WaitGroup{}
+func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int, nRoutines int) {
+	g := &errgroup.Group{}
+	g.SetLimit(nRoutines)
+
 	cm := CategoryMap{}
 	cc := CurieCounter{}
 
 	for _, fileName := range fileNames {
-		wg.Add(1)
-		go parseSynonymFile(fileName, batchSize, cl, &cm, &cc, &wg)
+		g.Go(func() error {
+			parseSynonymFile(fileName, batchSize, cl, &cm, &cc)
+			return nil
+		})
 	}
-	wg.Wait()
+
+	g.Wait()
 
 	categoryParquet := makeParquetName("BiolinkSynonyms.ndjson.zst", "Categories", 1)
 	writeParquet(categoryParquet, cm.ToTable())
@@ -500,11 +509,13 @@ var dbPath string
 var batchSize int
 
 func build(cmd *cobra.Command, args []string) {
+	cpuCount := runtime.NumCPU()
+
 	classFileNames := globFileNames(babelDir, "*Class.ndjson.zst")
-	cl := buildClassLookup(classFileNames)
+	cl := buildClassLookup(classFileNames, (cpuCount / 2))
 
 	synonymFileNames := globFileNames(babelDir, "*Synonyms.ndjson.zst")
-	buildSynonymParquets(synonymFileNames, cl, batchSize)
+	buildSynonymParquets(synonymFileNames, cl, batchSize, (cpuCount / 4))
 
 	buildDuckDB(dbPath)
 }
