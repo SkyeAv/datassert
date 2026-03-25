@@ -1,0 +1,5 @@
+*AGENTS.md
+*.opencode/
+*.parquet-store/
+*datassert
+*.duckdb
