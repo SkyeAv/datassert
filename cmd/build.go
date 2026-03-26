@@ -494,14 +494,6 @@ func getDB(dbPath string) *sql.DB {
 	return db
 }
 
-var tableSchemas []string = []string{
-	"CREATE TABLE IF NOT EXISTS SOURCES (SOURCE_ID INTEGER PRIMARY KEY, SOURCE_NAME VARCHAR, SOURCE_VERSION VARCHAR, NLP_LEVEL INTEGER);",
-	"CREATE TABLE IF NOT EXISTS CATEGORIES (CATEGORY_ID INTEGER PRIMARY KEY, CATEGORY_NAME VARCHAR);",
-	"CREATE TABLE IF NOT EXISTS CURIES (CURIE_ID INTEGER PRIMARY KEY, CURIE VARCHAR, PREFERRED_NAME VARCHAR, CATEGORY_ID INTEGER, TAXON_ID INTEGER);",
-	"CREATE TABLE IF NOT EXISTS SYNONYMS (CURIE_ID INTEGER, SOURCE_ID INTEGER, SYNONYM VARCHAR);",
-	"CREATE TABLE IF NOT EXISTS SYNONYMS_SORTED (CURIE_ID INTEGER, SOURCE_ID INTEGER, SYNONYM VARCHAR);",
-}
-
 var dbConfiguration []string = []string{
 	fmt.Sprintf("SET temp_directory = '%v'", os.TempDir()),
 	"SET preserve_insertion_order = false;",
@@ -528,19 +520,18 @@ func buildDuckDB(dbPath string) {
 	db := getDB(dbPath)
 	defer db.Close()
 
-	iterExecDB(db, tableSchemas)
 	iterExecDB(db, dbConfiguration)
 
-	_, err := db.Exec("INSERT INTO SOURCES SELECT * FROM read_parquet('.parquet-store/*Sources-*.parquet')")
+	_, err := db.Exec("CREATE TABLE SOURCES AS SELECT * FROM read_parquet('.parquet-store/*Sources-*.parquet')")
 	checkError(12, err)
 
-	_, err = db.Exec("INSERT INTO CATEGORIES SELECT * FROM read_parquet('.parquet-store/*Categories-*.parquet')")
+	_, err = db.Exec("CREATE TABLE CATEGORIES AS SELECT * FROM read_parquet('.parquet-store/*Categories-*.parquet') ORDER BY CATEGORY_NAME")
 	checkError(13, err)
 
-	_, err = db.Exec("INSERT INTO CURIES SELECT * FROM read_parquet('.parquet-store/*Curies-*.parquet')")
+	_, err = db.Exec("CREATE TABLE CURIES AS SELECT * FROM read_parquet('.parquet-store/*Curies-*.parquet') ORDER BY TAXON_ID")
 	checkError(14, err)
 
-	_, err = db.Exec("INSERT INTO SYNONYMS SELECT * FROM read_parquet('.parquet-store/*Synonyms-*.parquet')")
+	_, err = db.Exec("CREATE TABLE SYNONYMS AS SELECT * FROM read_parquet('.parquet-store/*Synonyms-*.parquet') ORDER BY SYNONYM")
 	checkError(15, err)
 
 	iterExecDB(db, indexOps)
