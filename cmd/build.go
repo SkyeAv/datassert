@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -122,19 +121,19 @@ func cleanToken(token string) string {
 }
 
 func cleanAliases(aliases []string) []string {
-	seen := map[string]struct{}{}
+	out := aliases[:0]
 
 	for _, a := range aliases {
 		c := strings.ToLower(a)
 		c = cleanToken(c)
 
 		if !isBadToken(c) {
-			seen[c] = struct{}{}
+			out = append(out, c)
 		}
 	}
 
-	out := maps.Keys(seen)
-	return slices.Collect(out)
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 func yieldReader(fileName string) *os.File {
@@ -525,15 +524,6 @@ func iterExecDB(db *sql.DB, queries []string) {
 	}
 }
 
-func iterParquetsDB(db *sql.DB, pattern string, query string) {
-	parquets := globFileNames(parquetBaseDir, pattern)
-	for _, parquet := range parquets {
-		formatted := fmt.Sprintf(query, parquet)
-		_, err := db.Exec(formatted)
-		checkError(12, err)
-	}
-}
-
 func buildDuckDB(dbPath string) {
 	db := getDB(dbPath)
 	defer db.Close()
@@ -541,10 +531,17 @@ func buildDuckDB(dbPath string) {
 	iterExecDB(db, tableSchemas)
 	iterExecDB(db, dbConfiguration)
 
-	iterParquetsDB(db, "*Sources-*.parquet", "INSERT INTO SOURCES SELECT SOURCE_ID, SOURCE_NAME, SOURCE_VERSION, NLP_LEVEL FROM read_parquet('%v')")
-	iterParquetsDB(db, "*Categories-*.parquet", "INSERT INTO CATEGORIES SELECT CATEGORY_ID, CATEGORY_NAME FROM read_parquet('%v')")
-	iterParquetsDB(db, "*Curies-*.parquet", "INSERT INTO CURIES SELECT CURIE_ID, CURIE, PREFERRED_NAME, CATEGORY_ID, TAXON_ID FROM read_parquet('%v')")
-	iterParquetsDB(db, "*Synonyms-*.parquet", "INSERT INTO SYNONYMS SELECT CURIE_ID, SOURCE_ID, SYNONYM FROM read_parquet('%v')")
+	_, err := db.Exec("INSERT INTO SOURCES SELECT * FROM read_parquet('.parquet-store/*Sources-*.parquet')")
+	checkError(12, err)
+
+	_, err = db.Exec("INSERT INTO CATEGORIES SELECT * FROM read_parquet('.parquet-store/*Categories-*.parquet')")
+	checkError(13, err)
+
+	_, err = db.Exec("INSERT INTO CURIES SELECT * FROM read_parquet('.parquet-store/*Curies-*.parquet')")
+	checkError(14, err)
+
+	_, err = db.Exec("INSERT INTO SYNONYMS SELECT * FROM read_parquet('.parquet-store/*Synonyms-*.parquet')")
+	checkError(15, err)
 
 	iterExecDB(db, indexOps)
 }
@@ -560,10 +557,10 @@ func build(cmd *cobra.Command, args []string) {
 	cpuCount := runtime.NumCPU()
 
 	classFileNames := globFileNames(babelDir, "*Class.ndjson.zst")
-	cl := buildClassLookup(classFileNames, (cpuCount / 2))
+	cl := buildClassLookup(classFileNames, (cpuCount))
 
 	synonymFileNames := globFileNames(babelDir, "*Synonyms.ndjson.zst")
-	buildSynonymParquets(synonymFileNames, cl, batchSize, (cpuCount / 4))
+	buildSynonymParquets(synonymFileNames, cl, batchSize, (cpuCount / 2))
 
 	buildDuckDB(dbPath)
 }
