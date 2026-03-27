@@ -323,9 +323,9 @@ var parquetBaseDir string = "./.parquet-store/"
 
 func makeParquetName(fileName string, thing string, fileNum int, shardNum uint, workerID int) string {
 	base := filepath.Base(fileName)
-	stem := strings.TrimSuffix(base, "Synonyms.ndjson.zst")
+	stem := strings.ToLower(strings.TrimSuffix(base, "Synonyms.ndjson.zst"))
 
-	return fmt.Sprintf("%v%v%v%d-%d-%d.parquet", parquetBaseDir, stem, thing, fileNum, shardNum, workerID)
+	return fmt.Sprintf("%v%v%v%d-shard%d-worker%d.parquet", parquetBaseDir, stem, thing, fileNum, shardNum, workerID)
 }
 
 func writeIfGtLen[T ParquetTable](fileName string, thing string, fileNum int, shardNum uint, workerID int, tableShard []T, maxBatch int) (int, []T) {
@@ -584,11 +584,11 @@ func iterExecDB(db *sql.DB, queries []string) {
 }
 
 func makeDBPath(basePath string, shardNum uint) string {
-	return fmt.Sprintf("%v-%d.duckdb", basePath, shardNum)
+	return fmt.Sprintf("%v-shard%d.duckdb", basePath, shardNum)
 }
 
 func shardGlob(thing string, shardNum uint) string {
-	return fmt.Sprintf(".parquet-store/*%v*-%d-*.parquet", thing, shardNum)
+	return fmt.Sprintf(".parquet-store/*%v*-shard%d-*.parquet", thing, shardNum)
 }
 
 func buildShardDB(basePath string, shardNum uint, bar *uiprogress.Bar) {
