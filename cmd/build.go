@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"crypto/md5"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -322,16 +324,20 @@ type CurieCounter struct {
 	counter atomic.Uint32
 	shards  [nShards]struct {
 		mu   sync.RWMutex
-		m    map[uint]uint32
+		m    map[[16]byte]uint32
 		_pad [40]byte
 	}
 }
 
-func (cc *CurieCounter) Shard(curie string) (uint, uint) {
-	h := xxhash.Sum64String(curie)
-	uintH := uint(h)
+func (cc *CurieCounter) Shard(curie string) ([16]byte, uint) {
+	b := []byte(curie)
+	h := md5.Sum(b)
+
+	asInt := binary.LittleEndian.Uint64(h[:8])
+	uintH := uint(asInt)
+
 	whichShard := uintH % nShards
-	return uintH, whichShard
+	return h, whichShard
 }
 
 func (cc *CurieCounter) GetOrNext(curie string) uint32 {
@@ -508,7 +514,7 @@ func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int, nR
 
 	cc := CurieCounter{}
 	for i := range cc.shards {
-		cc.shards[i].m = map[uint]uint32{}
+		cc.shards[i].m = map[[16]byte]uint32{}
 	}
 
 	n := len(fileNames)
