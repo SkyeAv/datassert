@@ -51,7 +51,7 @@ func computeXXHash(str string) uint64 {
 	return xxhash.Sum64(b)
 }
 
-const nShards = uint(20)
+const nShards = uint(16)
 
 func selectShard(h uint64) uint {
 	asUint := uint(h)
@@ -668,7 +668,7 @@ func build(cmd *cobra.Command, args []string) {
 var buildCmd = &cobra.Command{
 	Use:   "build --babel-dir <dir>",
 	Short: "Build a DuckDB assertion database from Babel exports",
-	Long:  "Reads *Class.ndjson.zst and *Synonyms.ndjson.zst files from --babel-dir, writes staging parquet artifacts to ./.parquet-store/, and builds 20 sharded DuckDB databases at --db-path (default: ./datassert-{0..19}.duckdb).",
+	Long:  "Reads *Class.ndjson.zst and *Synonyms.ndjson.zst files from --babel-dir, writes staging parquet artifacts to ./.parquet-store/, and builds 16 sharded DuckDB databases at --db-path (default: ./.datassert-shard{0..15}.duckdb).",
 	Run:   build,
 }
 

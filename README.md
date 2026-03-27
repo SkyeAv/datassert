@@ -26,8 +26,11 @@ datassert build --babel-dir /path/to/babel
 | Flag | Required | Default | Description |
 | --- | --- | --- | --- |
 | `--babel-dir` | Yes | N/A | Directory containing Babel `*Class.ndjson.zst` and `*Synonyms.ndjson.zst` files |
-| `--db-path` | No | `./datassert.duckdb` | Output path for the DuckDB database |
-| `--batch-size` | No | `1000000` | Number of records written per Parquet batch |
+| `--db-path` | No | `./.datassert` | Base output path for sharded DuckDB databases |
+| `--batch-size` | No | `50000` | Number of records per Parquet batch |
+| `--buffer-size` | No | `2048` | Channel buffer size for synonym file processing |
+| `--class-cpu-fraction` | No | `2` | Divisor of `NumCPU()` for class file goroutines |
+| `--synonym-cpu-fraction` | No | `4` | Divisor of `NumCPU()` for synonym file goroutines |
 
 ### Input Expectations
 
@@ -37,8 +40,8 @@ datassert build --babel-dir /path/to/babel
 ### Output Artifacts
 
 - Staging Parquet files are written to `./.parquet-store/`.
-- Final DuckDB database is written to `--db-path`.
-- Build creates and loads `SOURCES`, `CATEGORIES`, `CURIES`, and `SYNONYMS`, then indexes/sorts synonyms for query performance.
+- 16 sharded DuckDB databases are written to `<db-path>-shard{0..15}.duckdb`.
+- Each shard contains `SOURCES`, `CATEGORIES`, `CURIES`, and `SYNONYMS` tables, sorted and indexed for query performance.
 
 ### Examples
 
@@ -46,17 +49,17 @@ datassert build --babel-dir /path/to/babel
 # Use defaults for db path and batch size
 datassert build --babel-dir ./babel-exports
 
-# Write database to a custom location
-datassert build --babel-dir ./babel-exports --db-path ./data/datassert.duckdb
+# Write databases to a custom base path (produces ./data/mydb-shard{0..15}.duckdb)
+datassert build --babel-dir ./babel-exports --db-path ./data/mydb
 
-# Tune Parquet batch size
-datassert build --babel-dir ./babel-exports --batch-size 500000
+# Tune Parquet batch size and concurrency
+datassert build --babel-dir ./babel-exports --batch-size 100000 --class-cpu-fraction 1
 ```
 
 ### Runtime Behavior
 
-- Displays progress bars for class and synonym processing phases.
-- Uses CPU-based concurrency (`NumCPU()/2` for class processing and `NumCPU()/4` for synonym processing).
+- Displays progress bars for class, synonym, and DuckDB build phases.
+- Uses CPU-based concurrency with configurable fractions (`NumCPU()/class-cpu-fraction` and `NumCPU()/synonym-cpu-fraction`).
 
 ## Maintainer
 
