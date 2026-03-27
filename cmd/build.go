@@ -516,7 +516,7 @@ var sources []SourcesTable = []SourcesTable{
 	},
 }
 
-func buildSynonymParquets(fileNames []string, cl *ClassLookup, batchSize int, nRoutines int, bufferSize int) {
+func buildSynonymParquets(fileNames []string, cl *ClassLookup, nRoutines int) {
 	cm := CategoryMap{}
 
 	cc := CurieCounter{}
@@ -605,6 +605,8 @@ var babelDir string
 var dbPath string
 var batchSize int
 var bufferSize int
+var classCPUFraction int
+var synonymCPUFraction int
 
 func build(cmd *cobra.Command, args []string) {
 	uiprogress.Start()
@@ -613,10 +615,10 @@ func build(cmd *cobra.Command, args []string) {
 	cpuCount := runtime.NumCPU()
 
 	classFileNames := globFileNames(babelDir, "*Class.ndjson.zst")
-	cl := buildClassLookup(classFileNames, (cpuCount / 2))
+	cl := buildClassLookup(classFileNames, (cpuCount / classCPUFraction))
 
 	synonymFileNames := globFileNames(babelDir, "*Synonyms.ndjson.zst")
-	buildSynonymParquets(synonymFileNames, cl, batchSize, (cpuCount / 4), bufferSize)
+	buildSynonymParquets(synonymFileNames, cl, (cpuCount / synonymCPUFraction))
 
 	buildDuckDB(dbPath)
 }
@@ -633,10 +635,12 @@ func init() {
 
 	rootCmd.AddCommand(buildCmd)
 
-	buildCmd.Flags().StringVar(&babelDir, "babel-dir", "", "Directory containing Babel *Class.ndjson.zst and *Synonyms.ndjson.zst files")
-	buildCmd.Flags().StringVar(&dbPath, "db-path", "./datassert.duckdb", "Output path for the DuckDB database")
-	buildCmd.Flags().IntVar(&batchSize, "batch-size", 1000000, "Number of records per Parquet batch")
-	buildCmd.Flags().IntVar(&bufferSize, "buffer-size", 2048, "Size of the channel buffer used to process synonym files")
+	buildCmd.Flags().StringVar(&babelDir, "babel-dir", "", "Directory containing Babel *Class.ndjson.zst and *Synonyms.ndjson.zst files.")
+	buildCmd.Flags().StringVar(&dbPath, "db-path", "./datassert.duckdb", "Output path for the DuckDB database.")
+	buildCmd.Flags().IntVar(&batchSize, "batch-size", 1000000, "Number of records per Parquet batch.")
+	buildCmd.Flags().IntVar(&bufferSize, "buffer-size", 2048, "Size of the channel buffer used to process synonym files.")
+	buildCmd.Flags().IntVar(&classCPUFraction, "class-cpu-fraction", 2, "Fraction of CPU cores used to ingest Babel *Class.ndjson.zst files.")
+	buildCmd.Flags().IntVar(&classCPUFraction, "synonym-cpu-fraction", 4, "Fraction of CPU cores used to ingest Babel *Class.ndjson.zst files.")
 
 	buildCmd.MarkFlagRequired("babel-dir")
 }
