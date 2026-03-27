@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	github.com/bytedance/sonic v1.15.0
+	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/duckdb/duckdb-go/v2 v2.10500.0
 	github.com/gosuri/uiprogress v0.0.1
 	github.com/klauspost/compress v1.18.5
