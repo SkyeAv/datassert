@@ -266,16 +266,23 @@ func (cm *CategoryMap) GetOrAdd(category string) uint32 {
 	return actual.(uint32)
 }
 
-func (cm *CategoryMap) ToTable() []CategoriesTable {
-	tempCategories := []CategoriesTable{}
-	for categoryName, categoryID := range cm.m.Range {
-		tempCategories = append(
-			tempCategories,
-			CategoriesTable{
-				CategoryID: categoryID.(uint32),
-				Category:   categoryName.(string),
-			},
-		)
+func (cm *CategoryMap) ToTables() [nShards][]CategoriesTable {
+	tempCategories := [nShards][]CategoriesTable{}
+
+	for i := range nShards {
+		categoryShard := []CategoriesTable{}
+
+		s := &cm.shards[i]
+		for categoryName, categoryID := range s.m.Range {
+			categoryShard = append(
+				categoryShard,
+				CategoriesTable{
+					CategoryID: categoryID.(uint32),
+					Category:   categoryName.(string),
+				},
+			)
+		}
+
 	}
 
 	return tempCategories
@@ -448,7 +455,7 @@ func processSynonymRecords(fileName string, workerID int, records <-chan Synonym
 			},
 		)
 
-		curieNum, curieShard = writeIfGtLen(fileName, "Curies", curieNum, workerID, whichShard, curieShard, batchSize)
+		curieNum, curieShard = writeIfGtLen(fileName, "Curies", curieNum, whichShard, workerID, curieShard, batchSize)
 
 		newSynonyms := []SynonymsTable{}
 		for _, synonym := range l0Synonyms {
@@ -477,8 +484,11 @@ func processSynonymRecords(fileName string, workerID int, records <-chan Synonym
 		synonymNum, synonymsShard = writeIfGtLen(fileName, "Synonyms", synonymNum, whichShard, workerID, synonymsShard, batchSize)
 	}
 
-	_, _ = writeIfGtLen(fileName, "Curies", curieNum, workerID, tempCuries, 0)
-	_, _ = writeIfGtLen(fileName, "Synonyms", synonymNum, workerID, tempSynonyms, 0)
+	for i := range nShards {
+		_, _ = writeIfGtLen(fileName, "Curies", curieNum, i, workerID, tempCuries[i], 0)
+		_, _ = writeIfGtLen(fileName, "Synonyms", synonymNum, i, workerID, tempSynonyms[i], 0)
+	}
+
 }
 
 func parseSynonymFile(fileName string, nRoutines int, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, bar *uiprogress.Bar) {
@@ -536,11 +546,15 @@ func buildSynonymParquets(fileNames []string, cl *ClassLookup, nRoutines int) {
 		parseSynonymFile(fileName, nRoutines, cl, &cm, &cc, bar)
 	}
 
-	categoryParquet := makeParquetName("BiolinkSynonyms.ndjson.zst", "Categories", 1, 1)
-	writeParquet(categoryParquet, cm.ToTable())
+	for i, table := range cm.ToTables() {
+		categoryParquet := makeParquetName("BiolinkSynonyms.ndjson.zst", "Categories", 1, uint(i), 1)
+		writeParquet(categoryParquet, table)
+	}
 
-	sourceParquet := makeParquetName("BabelSynonyms.ndjson.zst", "Sources", 1, 1)
-	writeParquet(sourceParquet, sources)
+	for i := range nShards {
+		sourceParquet := makeParquetName("BabelSynonyms.ndjson.zst", "Sources", 1, uint(i), 1)
+		writeParquet(sourceParquet, sources)
+	}
 }
 
 func getDB(dbPath string) *sql.DB {
