@@ -242,20 +242,18 @@ type SynonymRecord struct {
 }
 
 type CategoriesTable struct {
-	shards [nShards][]struct {
-		CategoryID uint32 `parquet:"CATEGORY_ID"`
-		Category   string `parquet:"CATEGORY_NAME"`
-	}
+	CategoryID uint32 `parquet:"CATEGORY_ID"`
+	Category   string `parquet:"CATEGORY_NAME"`
 }
 
 type CategoryMap struct {
-	shards [nShards]struct{
+	shards [nShards]struct {
 		m       sync.Map
 		counter atomic.Uint32
 	}
 }
 
-func (cm *CategoryMap) GetOrAdd(caregory string, whichShard int) uint32 {
+func (cm *CategoryMap) GetOrAdd(category string) uint32 {
 	h := computeXXHash(category)
 	whichShard := selectShard(h)
 
@@ -284,60 +282,52 @@ func (cm *CategoryMap) ToTable() []CategoriesTable {
 }
 
 type SynonymsTable struct {
-	shards [nShards][]struct {
-		CurieID  uint32 `parquet:"CURIE_ID"`
-		SourceID uint8  `parquet:"SOURCE_ID"`
-		Synonym  string `parquet:"SYNONYM"`
-	}
+	CurieID  uint32 `parquet:"CURIE_ID"`
+	SourceID uint8  `parquet:"SOURCE_ID"`
+	Synonym  string `parquet:"SYNONYM"`
 }
 
 type CuriesTable struct {
-	shards [nShards][]struct {
-		CurieID       uint32 `parquet:"CURIE_ID"`
-		Curie         string `parquet:"CURIE"`
-		PreferredName string `parquet:"PREFERRED_NAME"`
-		CategoryID    uint32 `parquet:"CATEGORY_ID"`
-		Taxon         uint32 `parquet:"TAXON_ID,optional"`
-	}
+	CurieID       uint32 `parquet:"CURIE_ID"`
+	Curie         string `parquet:"CURIE"`
+	PreferredName string `parquet:"PREFERRED_NAME"`
+	CategoryID    uint32 `parquet:"CATEGORY_ID"`
+	Taxon         uint32 `parquet:"TAXON_ID,optional"`
 }
 
 type SourcesTable struct {
-	shards [nShards][]struct {
-		SourceID      uint8  `parquet:"SOURCE_ID"`
-		SourceName    string `parquet:"SOURCE_NAME"`
-		SourceVersion string `parquet:"SOURCE_VERSION"`
-		NLPLevel      uint8  `parquet:"NLP_LEVEL"`
-	}
+	SourceID      uint8  `parquet:"SOURCE_ID"`
+	SourceName    string `parquet:"SOURCE_NAME"`
+	SourceVersion string `parquet:"SOURCE_VERSION"`
+	NLPLevel      uint8  `parquet:"NLP_LEVEL"`
 }
 
 type ParquetTable interface {
 	CuriesTable | SynonymsTable | CategoriesTable | SourcesTable
 }
 
-func writeParquet[T ParquetTable](filePath string, table []T) {
-	err := parquet.WriteFile(filePath, table)
+func writeParquet[T ParquetTable](filePath string, tableShard []T) {
+	err := parquet.WriteFile(filePath, tableShard)
 	checkError(7, err)
 }
 
 var parquetBaseDir string = "./.parquet-store/"
 
-func makeParquetName(fileName string, thing string, fileNum int, shardNum int, workerID int) string {
+func makeParquetName(fileName string, thing string, fileNum int, shardNum uint, workerID int) string {
 	base := filepath.Base(fileName)
 	stem := strings.TrimSuffix(base, "Synonyms.ndjson.zst")
 
 	return fmt.Sprintf("%v%v%v%d-%d-%d.parquet", parquetBaseDir, stem, thing, fileNum, shardNum, workerID)
 }
 
-func writeIfGtLen[T ParquetTable](fileName string, thing string, fileNum int, shardNum int, workerID int, table *T, maxBatch int) (int, T) {
-	s := &table.shards[shardNum]
-	if len(s) > maxBatch {
+func writeIfGtLen[T ParquetTable](fileName string, thing string, fileNum int, shardNum uint, workerID int, tableShard []T, maxBatch int) (int, []T) {
+	if len(tableShard) > maxBatch {
 		parquetName := makeParquetName(fileName, thing, fileNum, shardNum, workerID)
-		writeParquet(parquetName, s)
-		s = []{}
-		return fileNum + 1, table
+		writeParquet(parquetName, tableShard)
+		return fileNum + 1, tableShard
 	}
 
-	return fileNum, table
+	return fileNum, tableShard
 }
 
 func stringToInt(str string) int {
@@ -394,8 +384,8 @@ func decodeRecord(records chan SynonymRecord, zr *zstd.Decoder) {
 }
 
 func processSynonymRecords(fileName string, workerID int, records <-chan SynonymRecord, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter) {
-	tempCuries := []CuriesTable{}
-	tempSynonyms := []SynonymsTable{}
+	tempCuries := [nShards][]CuriesTable{}
+	tempSynonyms := [nShards][]SynonymsTable{}
 
 	curieNum := 1
 	synonymNum := 1
@@ -446,8 +436,9 @@ func processSynonymRecords(fileName string, workerID int, records <-chan Synonym
 			taxon = stringToInt(str)
 		}
 
-		tempCuries = append(
-			tempCuries,
+		curieShard := tempCuries[whichShard]
+		curieShard = append(
+			curieShard,
 			CuriesTable{
 				CurieID:       curieID,
 				Curie:         curie,
@@ -457,7 +448,7 @@ func processSynonymRecords(fileName string, workerID int, records <-chan Synonym
 			},
 		)
 
-		curieNum, tempCuries = writeIfGtLen(fileName, "Curies", curieNum, workerID, tempCuries, batchSize)
+		curieNum, curieShard = writeIfGtLen(fileName, "Curies", curieNum, workerID, whichShard, curieShard, batchSize)
 
 		newSynonyms := []SynonymsTable{}
 		for _, synonym := range l0Synonyms {
@@ -481,8 +472,9 @@ func processSynonymRecords(fileName string, workerID int, records <-chan Synonym
 			)
 		}
 
-		tempSynonyms = append(tempSynonyms, newSynonyms...)
-		synonymNum, tempSynonyms = writeIfGtLen(fileName, "Synonyms", synonymNum, workerID, tempSynonyms, batchSize)
+		synonymsShard := tempSynonyms[whichShard]
+		synonymsShard = append(synonymsShard, newSynonyms...)
+		synonymNum, synonymsShard = writeIfGtLen(fileName, "Synonyms", synonymNum, whichShard, workerID, synonymsShard, batchSize)
 	}
 
 	_, _ = writeIfGtLen(fileName, "Curies", curieNum, workerID, tempCuries, 0)
