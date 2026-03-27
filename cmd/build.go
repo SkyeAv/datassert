@@ -47,7 +47,18 @@ func globFileNames(dir string, suffix string) []string {
 	return fileNames
 }
 
+func computeMD5(str string) [16]byte {
+	b := []byte(str)
+	return md5.Sum(b)
+}
+
 const nShards = uint(20)
+
+func selectShard(h [16]byte) uint {
+	asInt := binary.LittleEndian.Uint64(h[:8])
+	asUint := uint(asInt)
+	return asUint % nShards
+}
 
 type ClassLookup struct {
 	shards [nShards]struct {
@@ -58,13 +69,8 @@ type ClassLookup struct {
 }
 
 func (cl *ClassLookup) Shard(key string) ([16]byte, uint) {
-	b := []byte(key)
-	h := md5.Sum(b)
-
-	asInt := binary.LittleEndian.Uint64(h[:8])
-	uintH := uint(asInt)
-
-	whichShard := uintH % nShards
+	h := computeMD5(key)
+	whichShard := selectShard(h)
 	return h, whichShard
 }
 
@@ -337,13 +343,8 @@ type CurieCounter struct {
 }
 
 func (cc *CurieCounter) Shard(curie string) ([16]byte, uint) {
-	b := []byte(curie)
-	h := md5.Sum(b)
-
-	asInt := binary.LittleEndian.Uint64(h[:8])
-	uintH := uint(asInt)
-
-	whichShard := uintH % nShards
+	h := computeMD5(curie)
+	whichShard := selectShard(h)
 	return h, whichShard
 }
 
