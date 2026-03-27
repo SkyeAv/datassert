@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 
 	"github.com/bytedance/sonic"
-	"github.com/cespare/xxhash/v2"
 	_ "github.com/duckdb/duckdb-go/v2"
 	"github.com/gosuri/uiprogress"
 	"github.com/klauspost/compress/zstd"
@@ -53,14 +52,20 @@ const nShards = uint(20)
 type ClassLookup struct {
 	shards [nShards]struct {
 		mu   sync.Mutex
-		data map[string]string
+		data map[[16]byte]string
 		_pad [40]byte
 	}
 }
 
-func (cl *ClassLookup) Shard(key string) uint {
-	h := xxhash.Sum64String(key)
-	return uint(h) % nShards
+func (cl *ClassLookup) Shard(key string) ([16]byte, uint) {
+	b := []byte(key)
+	h := md5.Sum(b)
+
+	asInt := binary.LittleEndian.Uint64(h[:8])
+	uintH := uint(asInt)
+
+	whichShard := uintH % nShards
+	return h, whichShard
 }
 
 func (cl *ClassLookup) Set(key string, val []string) {
@@ -68,20 +73,22 @@ func (cl *ClassLookup) Set(key string, val []string) {
 		return
 	}
 
-	s := &cl.shards[cl.Shard(key)]
+	h, whichShard := cl.Shard(key)
+	s := &cl.shards[whichShard]
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.data[key] = strings.Join(val, "\t")
+	s.data[h] = strings.Join(val, "\t")
 }
 
 func (cl *ClassLookup) Get(key string) ([]string, bool) {
-	s := &cl.shards[cl.Shard(key)]
+	h, whichShard := cl.Shard(key)
+	s := &cl.shards[whichShard]
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	val, ok := s.data[key]
-	delete(s.data, key)
+	val, ok := s.data[h]
+	delete(s.data, h)
 
 	split := strings.Split(val, "\t")
 	return split, ok
@@ -205,7 +212,7 @@ func buildClassLookup(fileNames []string, nRoutines int) *ClassLookup {
 
 	cl := &ClassLookup{}
 	for i := range cl.shards {
-		cl.shards[i].data = map[string]string{}
+		cl.shards[i].data = map[[16]byte]string{}
 	}
 	n := len(fileNames)
 	bar := uiprogress.AddBar(n)
