@@ -562,21 +562,30 @@ func buildDuckDB(dbPath string) {
 	db := getDB(dbPath)
 	defer db.Close()
 
+	bar := uiprogress.AddBar(6)
+	bar.AppendCompleted()
+	bar.PrependElapsed()
+
 	iterExecDB(db, dbConfiguration)
+	bar.Incr()
 
 	_, err := db.Exec("CREATE TABLE SOURCES AS SELECT * FROM read_parquet('.parquet-store/*Sources-*.parquet')")
 	checkError(12, err)
+	bar.Incr()
 
 	_, err = db.Exec("CREATE TABLE CATEGORIES AS SELECT * FROM read_parquet('.parquet-store/*Categories-*.parquet') ORDER BY CATEGORY_NAME")
 	checkError(13, err)
+	bar.Incr()
 
 	_, err = db.Exec("CREATE TABLE CURIES AS SELECT * FROM read_parquet('.parquet-store/*Curies-*.parquet') ORDER BY TAXON_ID")
 	checkError(14, err)
 
 	_, err = db.Exec("CREATE TABLE SYNONYMS AS SELECT * FROM read_parquet('.parquet-store/*Synonyms-*.parquet') ORDER BY SYNONYM")
 	checkError(15, err)
+	bar.Incr()
 
 	iterExecDB(db, indexOps)
+	bar.Incr()
 }
 
 var babelDir string
