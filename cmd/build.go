@@ -318,8 +318,11 @@ type ParquetTable interface {
 }
 
 func writeParquet[T ParquetTable](filePath string, tableShard []T) {
-	err := parquet.WriteFile(filePath, tableShard)
-	checkError(7, err)
+	_, err := os.Stat(filePath)
+	if err != nil {
+		err := parquet.WriteFile(filePath, tableShard)
+		checkError(7, err)
+	}
 }
 
 func makeParquetName(datassertDir string, fileName string, thing string, fileNum int, shardNum uint, workerID int) string {
