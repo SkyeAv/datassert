@@ -322,18 +322,16 @@ func writeParquet[T ParquetTable](filePath string, tableShard []T) {
 	checkError(7, err)
 }
 
-var parquetBaseDir string = "./.parquet-store/"
-
-func makeParquetName(fileName string, thing string, fileNum int, shardNum uint, workerID int) string {
+func makeParquetName(datassertDir string, fileName string, thing string, fileNum int, shardNum uint, workerID int) string {
 	base := filepath.Base(fileName)
 	stem := strings.ToLower(strings.TrimSuffix(base, "Synonyms.ndjson.zst"))
 
-	return fmt.Sprintf("%v%v%v%d-shard%d-worker%d.parquet", parquetBaseDir, stem, thing, fileNum, shardNum, workerID)
+	return fmt.Sprintf("%v/.parquets/%v-%v:%d-%d:%d.parquet", datassertDir, stem, thing, fileNum, shardNum, workerID)
 }
 
-func writeIfGtLen[T ParquetTable](fileName string, thing string, fileNum int, shardNum uint, workerID int, tableShard []T, maxBatch int) (int, []T) {
+func writeIfGtLen[T ParquetTable](datassertDir string, fileName string, thing string, fileNum int, shardNum uint, workerID int, tableShard []T, maxBatch int) (int, []T) {
 	if len(tableShard) > maxBatch {
-		parquetName := makeParquetName(fileName, thing, fileNum, shardNum, workerID)
+		parquetName := makeParquetName(datassertDir, fileName, thing, fileNum, shardNum, workerID)
 		writeParquet(parquetName, tableShard)
 		return fileNum + 1, []T{}
 	}
@@ -394,7 +392,7 @@ func decodeRecord(records chan SynonymRecord, zr *zstd.Decoder) {
 	}
 }
 
-func processSynonymRecords(fileName string, workerID int, records <-chan SynonymRecord, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter) {
+func processSynonymRecords(datassertDir string, fileName string, workerID int, records <-chan SynonymRecord, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter) {
 	tempCuries := [nShards][]CuriesTable{}
 	tempSynonyms := [nShards][]SynonymsTable{}
 
@@ -458,7 +456,7 @@ func processSynonymRecords(fileName string, workerID int, records <-chan Synonym
 			},
 		)
 
-		curieNum, tempCuries[shardNum] = writeIfGtLen(fileName, "curies", curieNum, shardNum, workerID, tempCuries[shardNum], batchSize)
+		curieNum, tempCuries[shardNum] = writeIfGtLen(datassertDir, fileName, "curies", curieNum, shardNum, workerID, tempCuries[shardNum], batchSize)
 
 		newSynonyms := []SynonymsTable{}
 		for _, synonym := range l0Synonyms {
@@ -483,17 +481,17 @@ func processSynonymRecords(fileName string, workerID int, records <-chan Synonym
 		}
 
 		tempSynonyms[shardNum] = append(tempSynonyms[shardNum], newSynonyms...)
-		synonymNum, tempSynonyms[shardNum] = writeIfGtLen(fileName, "synonyms", synonymNum, shardNum, workerID, tempSynonyms[shardNum], batchSize)
+		synonymNum, tempSynonyms[shardNum] = writeIfGtLen(datassertDir, fileName, "synonyms", synonymNum, shardNum, workerID, tempSynonyms[shardNum], batchSize)
 	}
 
 	for i := range nShards {
-		_, _ = writeIfGtLen(fileName, "curies", curieNum, i, workerID, tempCuries[i], 0)
-		_, _ = writeIfGtLen(fileName, "synonyms", synonymNum, i, workerID, tempSynonyms[i], 0)
+		_, _ = writeIfGtLen(datassertDir, fileName, "curies", curieNum, i, workerID, tempCuries[i], 0)
+		_, _ = writeIfGtLen(datassertDir, fileName, "synonyms", synonymNum, i, workerID, tempSynonyms[i], 0)
 	}
 
 }
 
-func parseSynonymFile(fileName string, nRoutines int, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, bar *uiprogress.Bar) {
+func parseSynonymFile(datassertDir string, fileName string, nRoutines int, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, bar *uiprogress.Bar) {
 	f := yieldReader(fileName)
 	defer f.Close()
 
@@ -507,7 +505,7 @@ func parseSynonymFile(fileName string, nRoutines int, cl *ClassLookup, cm *Categ
 	g.SetLimit(nRoutines)
 	for w := range nRoutines {
 		g.Go(func() error {
-			processSynonymRecords(fileName, w, records, cl, cm, cc)
+			processSynonymRecords(datassertDir, fileName, w, records, cl, cm, cc)
 			return nil
 		})
 	}
@@ -531,7 +529,7 @@ var sources []SourcesTable = []SourcesTable{
 	},
 }
 
-func buildSynonymParquets(fileNames []string, cl *ClassLookup, nRoutines int) {
+func buildSynonymParquets(datassertDir string, fileNames []string, cl *ClassLookup, nRoutines int) {
 	cm := CategoryMap{}
 
 	cc := CurieCounter{}
@@ -547,16 +545,16 @@ func buildSynonymParquets(fileNames []string, cl *ClassLookup, nRoutines int) {
 	bar.AppendCompleted()
 
 	for _, fileName := range fileNames {
-		parseSynonymFile(fileName, nRoutines, cl, &cm, &cc, bar)
+		parseSynonymFile(datassertDir, fileName, nRoutines, cl, &cm, &cc, bar)
 	}
 
 	for i, table := range cm.ToTables() {
-		categoryParquet := makeParquetName("BiolinkSynonyms.ndjson.zst", "categories", 1, uint(i), 1)
+		categoryParquet := makeParquetName(datassertDir, "BiolinkSynonyms.ndjson.zst", "categories", 1, uint(i), 1)
 		writeParquet(categoryParquet, table)
 	}
 
 	for i := range nShards {
-		sourceParquet := makeParquetName("BabelSynonyms.ndjson.zst", "sources", 1, uint(i), 1)
+		sourceParquet := makeParquetName(datassertDir, "BabelSynonyms.ndjson.zst", "sources", 1, uint(i), 1)
 		writeParquet(sourceParquet, sources)
 	}
 }
@@ -590,15 +588,15 @@ func iterExecDB(db *sql.DB, queries []string) {
 }
 
 func makeDBPath(basePath string, shardNum uint) string {
-	return fmt.Sprintf("%v/datassert-shard%d.duckdb", basePath, shardNum)
+	return fmt.Sprintf("%v/data/%d.duckdb", basePath, shardNum)
 }
 
-func shardGlob(thing string, shardNum uint) string {
-	return fmt.Sprintf(".parquet-store/*%v*-shard%d-*.parquet", thing, shardNum)
+func shardGlob(datassertDir string, thing string, shardNum uint) string {
+	return fmt.Sprintf("%v/.parquets/*-%v:*-%d:*", datassertDir, thing, shardNum)
 }
 
-func buildShardDB(basePath string, shardNum uint, bar *uiprogress.Bar) {
-	shardPath := makeDBPath(basePath, shardNum)
+func buildShardDB(datassertDir string, shardNum uint, bar *uiprogress.Bar) {
+	shardPath := makeDBPath(datassertDir, shardNum)
 	db := getDB(shardPath)
 	defer db.Close()
 
@@ -606,25 +604,25 @@ func buildShardDB(basePath string, shardNum uint, bar *uiprogress.Bar) {
 
 	_, err := db.Exec(fmt.Sprintf(
 		"CREATE TABLE SOURCES AS SELECT * FROM read_parquet('%v')",
-		shardGlob("Sources", shardNum),
+		shardGlob(datassertDir, "Sources", shardNum),
 	))
 	checkError(12, err)
 
 	_, err = db.Exec(fmt.Sprintf(
 		"CREATE TABLE CATEGORIES AS SELECT * FROM read_parquet('%v') ORDER BY CATEGORY_NAME",
-		shardGlob("Categories", shardNum),
+		shardGlob(datassertDir, "Categories", shardNum),
 	))
 	checkError(13, err)
 
 	_, err = db.Exec(fmt.Sprintf(
 		"CREATE TABLE CURIES AS SELECT * FROM read_parquet('%v') ORDER BY TAXON_ID",
-		shardGlob("Curies", shardNum),
+		shardGlob(datassertDir, "Curies", shardNum),
 	))
 	checkError(14, err)
 
 	_, err = db.Exec(fmt.Sprintf(
 		"CREATE TABLE SYNONYMS AS SELECT * FROM read_parquet('%v') ORDER BY SYNONYM",
-		shardGlob("Synonyms", shardNum),
+		shardGlob(datassertDir, "Synonyms", shardNum),
 	))
 	checkError(15, err)
 
@@ -633,7 +631,7 @@ func buildShardDB(basePath string, shardNum uint, bar *uiprogress.Bar) {
 	bar.Incr()
 }
 
-func buildDuckDBs() {
+func buildDuckDBs(datassertDir string) {
 	bar := uiprogress.AddBar(int(nShards))
 	bar.PrependElapsed()
 	bar.PrependFunc(func(b *uiprogress.Bar) string {
@@ -642,7 +640,7 @@ func buildDuckDBs() {
 	bar.AppendCompleted()
 
 	for i := range nShards {
-		buildShardDB(dbDir, i, bar)
+		buildShardDB(datassertDir, i, bar)
 	}
 }
 
@@ -653,16 +651,23 @@ var bufferSize int
 var classCPUFraction int
 var synonymCPUFraction int
 
-func mkDotFiles() {
-	os.MkdirAll(parquetBaseDir, os.ModePerm)
-	os.MkdirAll(dbDir, os.ModePerm)
+func mkDirs() string {
+	datassertDir := filepath.Join(dbDir, "datassert")
+	parquetSubDir := filepath.Join(datassertDir, ".parquet")
+	dataSubDir := filepath.Join(datassertDir, "data")
+
+	os.RemoveAll(datassertDir)
+	os.MkdirAll(parquetSubDir, os.ModePerm)
+	os.MkdirAll(dataSubDir, os.ModePerm)
+
+	return datassertDir
 }
 
 func build(cmd *cobra.Command, args []string) {
 	uiprogress.Start()
 	defer uiprogress.Stop()
 
-	mkDotFiles()
+	datassertDir := mkDirs()
 
 	cpuCount := runtime.NumCPU()
 
@@ -670,9 +675,9 @@ func build(cmd *cobra.Command, args []string) {
 	cl := buildClassLookup(classFileNames, (cpuCount / classCPUFraction))
 
 	synonymFileNames := globFileNames(babelDir, "*Synonyms.ndjson.zst")
-	buildSynonymParquets(synonymFileNames, cl, (cpuCount / synonymCPUFraction))
+	buildSynonymParquets(datassertDir, synonymFileNames, cl, (cpuCount / synonymCPUFraction))
 
-	buildDuckDBs()
+	buildDuckDBs(datassertDir)
 }
 
 var buildCmd = &cobra.Command{
@@ -686,7 +691,7 @@ func init() {
 	rootCmd.AddCommand(buildCmd)
 
 	buildCmd.Flags().StringVar(&babelDir, "babel-dir", "", "Directory containing Babel *Class.ndjson.zst and *Synonyms.ndjson.zst files.")
-	buildCmd.Flags().StringVar(&dbDir, "db-dir", "./.datassert", "Base output path for the sharded DuckDB databases.")
+	buildCmd.Flags().StringVar(&dbDir, "db-dir", ".", "Base output path for the sharded DuckDB databases.")
 	buildCmd.Flags().IntVar(&batchSize, "batch-size", 50000, "Number of records per Parquet batch.")
 	buildCmd.Flags().IntVar(&bufferSize, "buffer-size", 2048, "Size of the channel buffer used to process synonym files.")
 	buildCmd.Flags().IntVar(&classCPUFraction, "class-cpu-fraction", 2, "Fraction of CPU cores used to ingest Babel *Class.ndjson.zst files.")
