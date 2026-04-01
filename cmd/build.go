@@ -398,9 +398,11 @@ func decodeRecord(records chan SynonymRecord, zr *zstd.Decoder) {
 func processSynonymRecords(datassertDir string, fileName string, workerID int, records <-chan SynonymRecord, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter) {
 	tempCuries := [nShards][]CuriesTable{}
 	tempSynonyms := [nShards][]SynonymsTable{}
+	tempCategories := [nShards][]CategoriesTable{}
 
 	curieNum := 1
 	synonymNum := 1
+	categoryNum := 1
 
 	for sr := range records {
 		curie := sr.Curie
@@ -448,21 +450,34 @@ func processSynonymRecords(datassertDir string, fileName string, workerID int, r
 			taxon = stringToInt(str)
 		}
 
-		tempCuries[shardNum] = append(
-			tempCuries[shardNum],
-			CuriesTable{
-				CurieID:       curieID,
-				Curie:         curie,
-				PreferredName: preferred,
-				CategoryID:    categoryID,
-				Taxon:         uint32(taxon),
-			},
-		)
+		curieRow := CuriesTable{
+			CurieID:       curieID,
+			Curie:         curie,
+			PreferredName: preferred,
+			CategoryID:    categoryID,
+			Taxon:         uint32(taxon),
+		}
 
-		curieNum, tempCuries[shardNum] = writeIfGtLen(datassertDir, fileName, "curies", curieNum, shardNum, workerID, tempCuries[shardNum], batchSize)
+		categoryRow := CategoriesTable{
+			CategoryID: categoryID,
+			Category:   category,
+		}
+
+		curieWrittenToShard := [nShards]bool{}
 
 		for _, synonym := range l0Synonyms {
 			_, termShardNum := hashAndShard(synonym)
+
+			if !curieWrittenToShard[termShardNum] {
+				tempCuries[termShardNum] = append(tempCuries[termShardNum], curieRow)
+				curieNum, tempCuries[termShardNum] = writeIfGtLen(datassertDir, fileName, "curies", curieNum, termShardNum, workerID, tempCuries[termShardNum], batchSize)
+
+				tempCategories[termShardNum] = append(tempCategories[termShardNum], categoryRow)
+				categoryNum, tempCategories[termShardNum] = writeIfGtLen(datassertDir, fileName, "categories", categoryNum, termShardNum, workerID, tempCategories[termShardNum], batchSize)
+
+				curieWrittenToShard[termShardNum] = true
+			}
+
 			tempSynonyms[termShardNum] = append(
 				tempSynonyms[termShardNum],
 				SynonymsTable{
@@ -473,8 +488,20 @@ func processSynonymRecords(datassertDir string, fileName string, workerID int, r
 			)
 			synonymNum, tempSynonyms[termShardNum] = writeIfGtLen(datassertDir, fileName, "synonyms", synonymNum, termShardNum, workerID, tempSynonyms[termShardNum], batchSize)
 		}
+
 		for _, synonym := range l1Synonyms {
 			_, termShardNum := hashAndShard(synonym)
+
+			if !curieWrittenToShard[termShardNum] {
+				tempCuries[termShardNum] = append(tempCuries[termShardNum], curieRow)
+				curieNum, tempCuries[termShardNum] = writeIfGtLen(datassertDir, fileName, "curies", curieNum, termShardNum, workerID, tempCuries[termShardNum], batchSize)
+
+				tempCategories[termShardNum] = append(tempCategories[termShardNum], categoryRow)
+				categoryNum, tempCategories[termShardNum] = writeIfGtLen(datassertDir, fileName, "categories", categoryNum, termShardNum, workerID, tempCategories[termShardNum], batchSize)
+
+				curieWrittenToShard[termShardNum] = true
+			}
+
 			tempSynonyms[termShardNum] = append(
 				tempSynonyms[termShardNum],
 				SynonymsTable{
@@ -490,8 +517,8 @@ func processSynonymRecords(datassertDir string, fileName string, workerID int, r
 	for i := range nShards {
 		_, _ = writeIfGtLen(datassertDir, fileName, "curies", curieNum, i, workerID, tempCuries[i], 0)
 		_, _ = writeIfGtLen(datassertDir, fileName, "synonyms", synonymNum, i, workerID, tempSynonyms[i], 0)
+		_, _ = writeIfGtLen(datassertDir, fileName, "categories", categoryNum, i, workerID, tempCategories[i], 0)
 	}
-
 }
 
 func parseSynonymFile(datassertDir string, fileName string, nRoutines int, cl *ClassLookup, cm *CategoryMap, cc *CurieCounter, bar *uiprogress.Bar) {
@@ -551,11 +578,6 @@ func buildSynonymParquets(datassertDir string, fileNames []string, cl *ClassLook
 		parseSynonymFile(datassertDir, fileName, nRoutines, cl, &cm, &cc, bar)
 	}
 
-	for i, table := range cm.ToTables() {
-		categoryParquet := makeParquetName(datassertDir, "BiolinkSynonyms.ndjson.zst", "categories", 1, uint(i), 1)
-		writeParquet(categoryParquet, table)
-	}
-
 	for i := range nShards {
 		sourceParquet := makeParquetName(datassertDir, "BabelSynonyms.ndjson.zst", "sources", 1, uint(i), 1)
 		writeParquet(sourceParquet, sources)
@@ -612,13 +634,13 @@ func buildShardDB(datassertDir string, shardNum uint, bar *uiprogress.Bar) {
 	checkError(12, err)
 
 	_, err = db.Exec(fmt.Sprintf(
-		"CREATE TABLE CATEGORIES AS SELECT * FROM read_parquet('%v') ORDER BY CATEGORY_NAME",
+		"CREATE TABLE CATEGORIES AS SELECT DISTINCT * FROM read_parquet('%v') ORDER BY CATEGORY_NAME",
 		shardGlob(datassertDir, "categories", shardNum),
 	))
 	checkError(13, err)
 
 	_, err = db.Exec(fmt.Sprintf(
-		"CREATE TABLE CURIES AS SELECT * FROM read_parquet('%v') ORDER BY TAXON_ID",
+		"CREATE TABLE CURIES AS SELECT DISTINCT * FROM read_parquet('%v') ORDER BY TAXON_ID",
 		shardGlob(datassertDir, "curies", shardNum),
 	))
 	checkError(14, err)
