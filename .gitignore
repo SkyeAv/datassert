@@ -2,3 +2,4 @@
 *.parquet-store/
 *datassert
 *.duckdb
+*docs/
