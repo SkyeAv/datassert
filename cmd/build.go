@@ -361,7 +361,7 @@ func clean(token string) string {
 	}
 
 	lastItem := len(cleaned) - 1
-	if cleaned[:1] == `'` && cleaned[:lastItem] == `'` {
+	if cleaned[:1] == `'` && cleaned[lastItem:] == `'` {
 		return clean(cleaned[1:lastItem])
 	} else if cleaned[:1] == `"` && cleaned[:lastItem] == `"` {
 		return clean(cleaned[1:lastItem])
