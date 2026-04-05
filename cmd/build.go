@@ -52,7 +52,7 @@ func generateDuckDBs() {
 	for shard := range shards {
 		s := fmt.Sprintf("%v", shard)
 		duckDBPath := fmt.Sprintf("%v/%v.duckdb", data, s)
-		shardPath := filepath.Join(parquets, s)
+		shardPath := fmt.Sprintf("%v/%v", parquets, s)
 
 		db, err := sql.Open("duckdb", duckDBPath)
 		if err != nil {
@@ -202,7 +202,7 @@ var hardcodedSources []sourcesSchema = []sourcesSchema{
 }
 
 func buildIntermediateParquets(l *lookup) {
-	synonymFiles, err := filepath.Glob(filepath.Join(synonyms, "*.ndjson.lz4"))
+	synonymFiles, err := filepath.Glob(fmt.Sprintf("%v/*.ndjson.lz4", synonyms))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func buildIntermediateParquets(l *lookup) {
 
 			for shard := range shards {
 				s := fmt.Sprintf("%v", shard)
-				shardPath := filepath.Join(parquets, s)
+				shardPath := fmt.Sprintf("%v/%v", parquets, s)
 
 				synonymsFile := fmt.Sprintf("%v/%v.synonyms.parquet", shardPath, hex)
 				err := parquet.WriteFile(synonymsFile, synonyms[shard])
@@ -328,7 +328,7 @@ func buildIntermediateParquets(l *lookup) {
 	g.Wait()
 	for shard := range shards {
 		s := fmt.Sprintf("%v", shard)
-		shardPath := filepath.Join(parquets, s)
+		shardPath := fmt.Sprintf("%v/%v", parquets, s)
 
 		h := xxhash.Sum64String(shardPath)
 		hex := fmt.Sprintf("%016x", h)
@@ -452,7 +452,7 @@ type classJSON struct {
 }
 
 func buildInMemoryLookup() *lookup {
-	classFiles, err := filepath.Glob(filepath.Join(classes, "*.ndjson.lz4"))
+	classFiles, err := filepath.Glob(fmt.Sprintf("%v/*.ndjson.lz4", classes))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -548,7 +548,7 @@ func nextOpenChunk(filename string, chunk uint, dest string) (*chunkWriter, erro
 	chunkExt := fmt.Sprintf("%d.ndjson.lz4", chunk)
 	chunkBasename := swapExt(filename, chunkExt)
 
-	chunkPath := filepath.Join(dest, chunkBasename)
+	chunkPath := fmt.Sprintf("%v/%v", dest, chunkBasename)
 
 	f, err := os.Create(chunkPath)
 	if err != nil {
@@ -612,7 +612,7 @@ func getBABELFiles(version string, endpoints []string) [][2]string {
 	var babelFiles [][2]string = [][2]string{}
 
 	for _, endpoint := range endpoints {
-		downloads := filepath.Join(renci, version, endpoint)
+		downloads := fmt.Sprintf("%v/%v/%v", renci, version, endpoint)
 
 		resp, err := http.Get(downloads)
 		if err != nil {
@@ -629,7 +629,7 @@ func getBABELFiles(version string, endpoints []string) [][2]string {
 		for _, match := range matches {
 			// match[1] is just the filename instead of the whole html
 			filename := match[1]
-			url := filepath.Join(downloads, filename)
+			url := fmt.Sprintf("%v/%v", downloads, filename)
 
 			filename = filepath.Base(filename)
 			babelFiles = append(babelFiles, [2]string{filename, url})
