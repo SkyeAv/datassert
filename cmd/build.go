@@ -41,9 +41,10 @@ var indexes []string = []string{
 }
 
 func generateDuckDBs() {
-	fmt.Println("---")
+	fmt.Println("-----")
 	fmt.Println("Generating DuckDB Databases:")
-	fmt.Println("---")
+	fmt.Println("-----")
+	fmt.Println("")
 
 	bar := uiprogress.AddBar(int(shards))
 	bar.PrependElapsed()
@@ -207,9 +208,10 @@ func buildIntermediateParquets(l *lookup) {
 		log.Fatal(err)
 	}
 
-	fmt.Println("---")
+	fmt.Println("-----")
 	fmt.Println("Building Intermediate Parquets:")
-	fmt.Println("---")
+	fmt.Println("-----")
+	fmt.Println("")
 
 	bar := uiprogress.AddBar(len(synonymFiles))
 	bar.PrependElapsed()
@@ -457,9 +459,10 @@ func buildInMemoryLookup() *lookup {
 		log.Fatal(err)
 	}
 
-	fmt.Println("---")
+	fmt.Println("-----")
 	fmt.Println("Building In Memory Lookup:")
-	fmt.Println("---")
+	fmt.Println("-----")
+	fmt.Println("")
 
 	bar := uiprogress.AddBar(len(classFiles))
 	bar.PrependElapsed()
@@ -653,9 +656,10 @@ var synonymEndpoints []string = []string{
 func downloadBABEL(version string, endpoints []string, dest string) {
 	babelFiles := getBABELFiles(version, endpoints)
 
-	fmt.Println("---")
-	fmt.Println("Downloading BABEL Files:")
-	fmt.Println("---")
+	fmt.Println("-----")
+	fmt.Printf("Downloading BABEL Files To %v:", dest)
+	fmt.Println("-----")
+	fmt.Println("")
 
 	bar := uiprogress.AddBar(len(babelFiles))
 	bar.PrependElapsed()
