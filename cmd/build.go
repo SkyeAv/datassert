@@ -611,9 +611,7 @@ func downloadAndSplit(filename string, url string, dest string) error {
 
 const renci string = "https://stars.renci.org/var/babel_outputs"
 
-var dataRegex *regexp.Regexp = regexp.MustCompile(`<a href="([^"]+\.gz)"`)
-
-func getBABELFiles(version string, endpoints []string) [][2]string {
+func getBABELFiles(version string, endpoints []string, dataRegex *regexp.Regexp) [][2]string {
 	var babelFiles [][2]string = [][2]string{}
 
 	for _, endpoint := range endpoints {
@@ -644,6 +642,9 @@ func getBABELFiles(version string, endpoints []string) [][2]string {
 	return babelFiles
 }
 
+var classRegex *regexp.Regexp = regexp.MustCompile(`<a href="([^"]*_nodes[^"]*\.gz)"`)
+var synonymRegex *regexp.Regexp = regexp.MustCompile(`<a href="([^"]+\.gz)"`)
+
 var classEndpoints []string = []string{
 	"kgx/",
 }
@@ -653,8 +654,8 @@ var synonymEndpoints []string = []string{
 	"synonyms/geneprotein/",
 }
 
-func downloadBABEL(version string, endpoints []string, dest string) {
-	babelFiles := getBABELFiles(version, endpoints)
+func downloadBABEL(version string, endpoints []string, dest string, dataRegex *regexp.Regexp) {
+	babelFiles := getBABELFiles(version, endpoints, dataRegex)
 
 	fmt.Println("-----")
 	fmt.Printf("Downloading BABEL Files To %v:", dest)
@@ -719,8 +720,8 @@ func build(cmd *cobra.Command, args []string) {
 
 	if !skipDownloads {
 		// download classes and endpoints from BABEL
-		downloadBABEL(version, classEndpoints, classes)
-		downloadBABEL(version, synonymEndpoints, synonyms)
+		downloadBABEL(version, classEndpoints, classes, classRegex)
+		downloadBABEL(version, synonymEndpoints, synonyms, synonymRegex)
 	}
 
 	if !useExistingParquets {
