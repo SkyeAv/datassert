@@ -79,13 +79,13 @@ func generateDuckDBs() {
 			log.Fatal(err)
 		}
 
-		curiesQuery := fmt.Sprintf("CREATE TABLE CURIES AS SELECT DISTINCT ON (CURIE) * FROM read_parquet('%v/*.curies.parquet') ORDER BY CURIE, CURIE_ID ASC, TAXON_ID;", shardPath)
+		curiesQuery := fmt.Sprintf("CREATE TABLE CURIES AS SELECT DISTINCT ON (CURIE_ID) * FROM read_parquet('%v/*.curies.parquet') ORDER BY CURIE, CURIE_ID ASC, TAXON_ID;", shardPath)
 		_, err = db.Exec(curiesQuery)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		synonymsQuery := fmt.Sprintf("CREATE TABLE SYNONYMS AS SELECT DISTINCT ON (SYNONYM) * FROM read_parquet('%v/*.synonyms.parquet') ORDER BY SYNONYM, CURIE_ID ASC, SOURCE_ID;", shardPath)
+		synonymsQuery := fmt.Sprintf("CREATE TABLE SYNONYMS AS SELECT DISTINCT ON (SYNONYM, CURIE_ID) * FROM read_parquet('%v/*.synonyms.parquet') ORDER BY SYNONYM, CURIE_ID ASC, SOURCE_ID;", shardPath)
 		_, err = db.Exec(synonymsQuery)
 		if err != nil {
 			log.Fatal(err)
@@ -140,28 +140,23 @@ type categoriesSchema struct {
 }
 
 type categoryCounter struct {
-	counter atomic.Uint32
-	shard   [shards]struct {
-		categories *xsync.MapOf[string, uint32]
-	}
+	counter    atomic.Uint32
+	categories *xsync.MapOf[string, uint32]
 }
 
 func (c *categoryCounter) GetCount(shard uint, category string) uint32 {
-	s := &c.shard[shard]
-
-	if val, ok := s.categories.Load(category); ok {
+	if val, ok := c.categories.Load(category); ok {
 		return val
 	}
 
-	val, _ := s.categories.LoadOrStore(category, c.counter.Add(1))
+	val, _ := c.categories.LoadOrStore(category, c.counter.Add(1))
 	return val
 }
 
-func (c *categoryCounter) BuildSchema(shard uint) []categoriesSchema {
+func (c *categoryCounter) BuildSchema() []categoriesSchema {
 	var schema []categoriesSchema = []categoriesSchema{}
-	s := &c.shard[shard]
 
-	for name, id := range s.categories.Range {
+	for name, id := range c.categories.Range {
 		schema = append(schema, categoriesSchema{Category: name, CategoryID: id})
 	}
 
@@ -215,10 +210,9 @@ func buildIntermediateParquets(l *lookup, maxCPUs int) {
 	})
 	bar.AppendCompleted()
 
-	var c *categoryCounter = &categoryCounter{}
+	var c *categoryCounter = &categoryCounter{categories: xsync.NewMapOf[string, uint32]()}
 	var u *curieCounter = &curieCounter{}
 	for shard := range shards {
-		c.shard[shard].categories = xsync.NewMapOf[string, uint32]()
 		u.shard[shard].id = map[uint64]uint32{}
 	}
 
@@ -327,6 +321,8 @@ func buildIntermediateParquets(l *lookup, maxCPUs int) {
 	}
 
 	g.Wait()
+
+	allCategories := c.BuildSchema()
 	for shard := range shards {
 		s := fmt.Sprintf("%v", shard)
 		shardPath := fmt.Sprintf("%v/%v", parquets, s)
@@ -341,8 +337,7 @@ func buildIntermediateParquets(l *lookup, maxCPUs int) {
 		}
 
 		categoriesFile := fmt.Sprintf("%v/%v.categories.parquet", shardPath, hex)
-		categories := c.BuildSchema(shard)
-		err = parquet.WriteFile(categoriesFile, categories)
+		err = parquet.WriteFile(categoriesFile, allCategories)
 		if err != nil {
 			log.Fatal(err)
 		}
