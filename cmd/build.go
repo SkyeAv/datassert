@@ -247,16 +247,16 @@ func buildIntermediateParquets(l *lookup, maxCPUs int) {
 					continue
 				}
 
-				shard, h := getShard(curie)
-				curID := u.GetCount(shard, h)
+				curieShard, h := getShard(curie)
+				curID := u.GetCount(curieShard, h)
 
 				preferred := sj.PreferredName
 				preferred = clean(preferred)
 
 				category := sj.Categories[0]
 
-				shard, _ = getShard(category)
-				catID := c.GetCount(shard, category)
+				categoryShard, _ := getShard(category)
+				catID := c.GetCount(categoryShard, category)
 
 				taxID := 0
 				if len(sj.Taxon) > 0 {
@@ -274,7 +274,7 @@ func buildIntermediateParquets(l *lookup, maxCPUs int) {
 				aliases := sj.Synonyms
 				aliases = qcMultipleTokens(aliases, 1)
 
-				if equiv, ok := l.Get(shard, h); ok {
+				if equiv, ok := l.Get(curieShard, h); ok {
 					aliases = append(aliases, equiv...)
 				}
 
@@ -406,7 +406,7 @@ func qcMultipleTokens(tokens []string, level int) []string {
 	return passed
 }
 
-const shards uint = 12
+const shards uint = 16
 
 func getShard(s string) (uint, uint64) {
 	h := xxhash.Sum64String(s)
@@ -665,7 +665,7 @@ func downloadBABEL(version string, endpoints []string, dest string, dataRegex *r
 		url := fileInfo[1]
 
 		var err error
-		var maxAttempts int = 3
+		var maxAttempts int = 5
 
 		for range maxAttempts {
 			err = downloadAndSplit(filename, url, dest)
@@ -679,7 +679,7 @@ func downloadBABEL(version string, endpoints []string, dest string, dataRegex *r
 				os.RemoveAll(file)
 			}
 
-			time.Sleep(10 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 
 		if err != nil {
