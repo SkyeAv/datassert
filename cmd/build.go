@@ -755,7 +755,7 @@ func build(cmd *cobra.Command, args []string) {
 	// build required directories
 	initializer()
 
-	if !skipDownloads || !useExistingParquets {
+	if !skipDownloads || useExistingParquets {
 		// download classes and endpoints from BABEL
 		downloadBABEL(version, classEndpoints, classes, classRegex)
 		downloadBABEL(version, synonymEndpoints, synonyms, synonymRegex)
