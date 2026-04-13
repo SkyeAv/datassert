@@ -33,6 +33,7 @@ import (
 var configuration []string = []string{
 	fmt.Sprintf("SET temp_directory = '%v'", os.TempDir()),
 	"SET preserve_insertion_order = false;",
+	"SET memory_limit = '140GB';",
 }
 
 var indexes []string = []string{
@@ -79,14 +80,38 @@ func generateDuckDBs() {
 			log.Fatal(err)
 		}
 
-		curiesQuery := fmt.Sprintf("CREATE TABLE CURIES AS SELECT DISTINCT ON (CURIE_ID) * FROM read_parquet('%v/*.curies.parquet') ORDER BY CURIE, CURIE_ID ASC, TAXON_ID;", shardPath)
+		curiesQuery := fmt.Sprintf("CREATE TABLE CURIES_RAW AS SELECT * FROM read_parquet('%v/*.curies.parquet');", shardPath)
 		_, err = db.Exec(curiesQuery)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		synonymsQuery := fmt.Sprintf("CREATE TABLE SYNONYMS AS SELECT DISTINCT ON (SYNONYM, CURIE_ID) * FROM read_parquet('%v/*.synonyms.parquet') ORDER BY SYNONYM, CURIE_ID ASC, SOURCE_ID;", shardPath)
+		curieSort := "CREATE TABLE CURIES AS SELECT DISTINCT ON (CURIE_ID) * FROM CURIES_RAW ORDER BY CURIE, CURIE_ID ASC, TAXON_ID;"
+		_, err = db.Exec(curieSort)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		curieCleanup := "DROP TABLE CURIES_RAW;"
+		_, err = db.Exec(curieCleanup)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		synonymsQuery := fmt.Sprintf("CREATE TABLE SYNONYMS_RAW AS SELECT * FROM read_parquet('%v/*.synonyms.parquet');", shardPath)
 		_, err = db.Exec(synonymsQuery)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		synonymSort := "CREATE TABLE SYNONYMS AS SELECT DISTINCT ON (SYNONYM, CURIE_ID) * FROM SYNONYMS_RAW ORDER BY SYNONYM, CURIE_ID ASC, SOURCE_ID;"
+		_, err = db.Exec(synonymSort)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		synonymCleanup := "DROP TABLE SYNONYMS_RAW;"
+		_, err = db.Exec(synonymCleanup)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -98,6 +123,7 @@ func generateDuckDBs() {
 			}
 		}
 
+		db.Close()
 		bar.Incr()
 	}
 }
@@ -406,7 +432,7 @@ func qcMultipleTokens(tokens []string, level int) []string {
 	return passed
 }
 
-const shards uint = 32
+const shards uint = 8
 
 func getShard(s string) (uint, uint64) {
 	h := xxhash.Sum64String(s)
