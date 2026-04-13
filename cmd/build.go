@@ -33,7 +33,7 @@ import (
 var configuration []string = []string{
 	fmt.Sprintf("SET temp_directory = '%v'", os.TempDir()),
 	"SET preserve_insertion_order = false;",
-	"SET memory_limit = '140GB';",
+	"SET memory_limit = '120GB';",
 }
 
 var indexes []string = []string{
