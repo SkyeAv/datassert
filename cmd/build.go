@@ -33,7 +33,7 @@ import (
 var parallelBuilds int = int(shards) / 2
 
 var configuration []string = []string{
-	fmt.Sprintf("SET memory_limit = '%vGB';", 120/parallelBuilds),
+	fmt.Sprintf("SET memory_limit = '%vGB';", 128/parallelBuilds),
 	fmt.Sprintf("SET threads = %d;", maxCPUs/parallelBuilds),
 	fmt.Sprintf("SET temp_directory = '%v';", os.TempDir()),
 	"SET preserve_insertion_order = false;",
