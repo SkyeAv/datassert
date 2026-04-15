@@ -113,7 +113,7 @@ import (
 
 - Directory paths and version strings are `const` at file scope.
 - SQL configuration (DuckDB settings) and index DDL are `var` slices at file scope.
-- Shard count is a typed constant: `const shards uint = 12`.
+- Shard count is a typed constant: `const shards uint = 10`.
 
 ### Comments
 
@@ -124,10 +124,10 @@ import (
 ## Architecture Notes
 
 - **Pipeline stages:** Download → In-Memory Lookup → Parquet Staging → DuckDB Generation.
-- **Sharding:** All data is sharded by xxhash of key strings into 12 shards (`getShard`).
+- **Sharding:** All data is sharded by xxhash of key strings into 10 shards (`getShard`).
 - **CLI:** Cobra with `cmd/root.go` (root command) and `cmd/build.go` (build subcommand with flags).
 - **Data flow:** BABEL NDJSON → LZ4-compressed chunks → Parquet files → DuckDB databases.
-- **Output:** `./datassert/data/{0..11}.duckdb` with `SOURCES`, `CATEGORIES`, `CURIES`, `SYNONYMS` tables.
+- **Output:** `./datassert/data/{0..9}.duckdb` with `SOURCES`, `CATEGORIES`, `CURIES`, `SYNONYMS` tables.
 
 ## Key Dependencies
 

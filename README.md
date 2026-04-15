@@ -32,16 +32,16 @@ The build command automatically downloads BABEL exports from RENCI (`https://sta
 
 ### Data Pipeline
 
-1. **Download** -- BABEL class and synonym files are downloaded from RENCI and split into LZ4-compressed NDJSON chunks under `./datassert/downloads/`.
+1. **Download** -- BABEL class and synonym files are downloaded from RENCI and split into LZ4-compressed NDJSON chunks under `./datassert/downloads/classes/` and `./datassert/downloads/synonyms/`.
 2. **Lookup** -- Class files (`*.ndjson.lz4`) are read to build an in-memory equivalent-identifier lookup.
 3. **Parquet Staging** -- Synonym files are processed with the lookup, quality-controlled, and written as sharded Parquet files to `./datassert/parquets/`.
-4. **DuckDB Generation** -- Parquet files are loaded into 12 sharded DuckDB databases under `./datassert/data/`.
+4. **DuckDB Generation** -- Parquet files are loaded into 10 sharded DuckDB databases under `./datassert/data/`.
 
 ### Output Artifacts
 
-- 12 sharded DuckDB databases are written to `./datassert/data/{0..11}.duckdb`.
+- 10 sharded DuckDB databases are written to `./datassert/data/{0..9}.duckdb`.
 - Each shard contains `SOURCES`, `CATEGORIES`, `CURIES`, and `SYNONYMS` tables, deduplicated, sorted, and indexed for query performance.
-- Staging Parquet files are written to `./datassert/parquets/{0..11}/`.
+- Staging Parquet files are written to `./datassert/parquets/{0..9}/`.
 
 ### Examples
 
@@ -60,7 +60,7 @@ datassert build --use-existing-parquets
 
 - Displays progress bars for download, class lookup, synonym processing, and DuckDB build phases.
 - Uses 90% of available CPUs for concurrent processing.
-- Downloads are retried up to 3 times on failure with a 10-second backoff.
+- Downloads are retried up to 5 times on failure with a 5-second backoff.
 - All working files are stored under `./datassert/`.
 
 ## Maintainer
