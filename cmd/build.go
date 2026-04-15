@@ -376,7 +376,13 @@ func tokenQC(token string) bool {
 		return false
 	}
 
-	return !slices.Contains(bannedTokens, token)
+	for _, banned := range bannedTokens {
+		if strings.Contains(token, banned) {
+			return false
+		}
+	}
+
+	return true
 }
 
 var levelTwoRegex *regexp.Regexp = regexp.MustCompile(`\W+`)
